@@ -6,6 +6,14 @@ export const metadata: Metadata = {
   description:
     "Aplikasi Manajemen Presensi Harian Siswa dan Jurnal Agenda Pembelajaran Guru — SNT 10 Kupang",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/logo-snt.png", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/logo-snt.png",
+    apple: "/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -32,6 +40,8 @@ export default function RootLayout({
   return (
     <html lang="id" data-scroll-behavior="smooth">
       <head>
+        <link rel="icon" href="/logo-snt.png" type="image/png" />
+        <link rel="shortcut icon" href="/logo-snt.png" type="image/png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
