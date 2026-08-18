@@ -1,0 +1,27 @@
+{
+  "name": "Sistem Presensi & Jurnal Kelas — SNT 10 Kupang",
+  "short_name": "SNT 10 Kupang",
+  "description": "Aplikasi Manajemen Presensi Harian Siswa dan Jurnal Agenda Pembelajaran Guru — Sekolah Negeri Terintegrasi 10 Kupang",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1e3863",
+  "background_color": "#f0f2f5",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "utilities"],
+  "lang": "id",
+  "dir": "ltr"
+}
