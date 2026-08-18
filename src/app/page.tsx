@@ -27,7 +27,10 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'ID Pengguna atau kata sandi tidak sesuai.');
+        const fullMsg = data.details
+          ? `${data.error} (Detail: ${data.details})`
+          : data.error || 'ID Pengguna atau kata sandi tidak sesuai.';
+        setError(fullMsg);
         return;
       }
 

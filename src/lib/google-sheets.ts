@@ -19,6 +19,17 @@ function getSheets(): sheets_v4.Sheets {
 
   const client_email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const private_key = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+  const spreadsheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
+
+  if (!client_email) {
+    throw new Error('Konfigurasi GOOGLE_SERVICE_ACCOUNT_EMAIL belum diisi di Environment Variables.');
+  }
+  if (!private_key) {
+    throw new Error('Konfigurasi GOOGLE_PRIVATE_KEY belum diisi di Environment Variables.');
+  }
+  if (!spreadsheetId) {
+    throw new Error('Konfigurasi GOOGLE_SHEET_ID belum diisi di Environment Variables.');
+  }
 
   const auth = new google.auth.GoogleAuth({
     credentials: {
@@ -32,7 +43,7 @@ function getSheets(): sheets_v4.Sheets {
   return sheetsInstance;
 }
 
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID!;
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '';
 
 /**
  * Execute with auto-retry on network timeout/transient error.
