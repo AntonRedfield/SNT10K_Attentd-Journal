@@ -6,6 +6,14 @@ function formatPrivateKey(rawKey: string | undefined): string | undefined {
   if (!rawKey) return undefined;
   let key = rawKey.trim();
 
+  // If user pasted entire service-account JSON into GOOGLE_PRIVATE_KEY
+  if (key.startsWith('{') && key.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(key);
+      if (parsed.private_key) key = parsed.private_key.trim();
+    } catch {}
+  }
+
   // 1. Remove wrapping quotes (single or double)
   if (
     (key.startsWith('"') && key.endsWith('"')) ||
