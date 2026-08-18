@@ -35,6 +35,37 @@ function JournalContent() {
   const [filterSubject, setFilterSubject] = useState('ALL');
 
   const [syncing, setSyncing] = useState(false);
+  const [searchJournalQuery, setSearchJournalQuery] = useState('');
+  const [filterTeacher, setFilterTeacher] = useState('ALL');
+  const [sortJournalBy, setSortJournalBy] = useState<'week_asc' | 'week_desc' | 'date_desc' | 'date_asc' | 'subject_asc'>('week_asc');
+
+  // Filter and sort journals
+  const displayedJournals = useMemo(() => {
+    let result = journals.filter((j) => {
+      if (filterSubject !== 'ALL' && j.subject_name.trim().toLowerCase() !== filterSubject.trim().toLowerCase()) return false;
+      if (filterTeacher !== 'ALL' && j.teacher_username?.toLowerCase() !== filterTeacher.toLowerCase()) return false;
+      if (searchJournalQuery) {
+        const q = searchJournalQuery.toLowerCase();
+        const matchTopic = j.topic?.toLowerCase().includes(q);
+        const matchSubj = j.subject_name?.toLowerCase().includes(q);
+        const matchTeacher = j.teacher_username?.toLowerCase().includes(q);
+        if (!matchTopic && !matchSubj && !matchTeacher) return false;
+      }
+      return true;
+    });
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (sortJournalBy === 'week_asc') return (Number(a.week_number) || 0) - (Number(b.week_number) || 0);
+      if (sortJournalBy === 'week_desc') return (Number(b.week_number) || 0) - (Number(a.week_number) || 0);
+      if (sortJournalBy === 'date_desc') return (b.timestamp || '').localeCompare(a.timestamp || '');
+      if (sortJournalBy === 'date_asc') return (a.timestamp || '').localeCompare(b.timestamp || '');
+      if (sortJournalBy === 'subject_asc') return (a.subject_name || '').localeCompare(b.subject_name || '');
+      return 0;
+    });
+
+    return sorted;
+  }, [journals, filterSubject, filterTeacher, searchJournalQuery, sortJournalBy]);
 
   // Sync classes from Students sheet
   const syncClasses = useCallback(async (currentUser: SessionPayload | null, isManual = false) => {
@@ -183,44 +214,12 @@ function JournalContent() {
     }
   };
 
-  const [searchJournalQuery, setSearchJournalQuery] = useState('');
-  const [filterTeacher, setFilterTeacher] = useState('ALL');
-  const [sortJournalBy, setSortJournalBy] = useState<'week_asc' | 'week_desc' | 'date_desc' | 'date_asc' | 'subject_asc'>('week_asc');
-
   if (!user) return <PageLoader text="Memuat modul jurnal agenda mengajar..." />;
 
   // Unique list of teachers in loaded journals
   const availableTeachers = Array.from(
     new Set(journals.map((j) => j.teacher_username).filter(Boolean))
   ).sort();
-
-  // Filter and sort journals
-  const displayedJournals = useMemo(() => {
-    let result = journals.filter((j) => {
-      if (filterSubject !== 'ALL' && j.subject_name.trim().toLowerCase() !== filterSubject.trim().toLowerCase()) return false;
-      if (filterTeacher !== 'ALL' && j.teacher_username?.toLowerCase() !== filterTeacher.toLowerCase()) return false;
-      if (searchJournalQuery) {
-        const q = searchJournalQuery.toLowerCase();
-        const matchTopic = j.topic?.toLowerCase().includes(q);
-        const matchSubj = j.subject_name?.toLowerCase().includes(q);
-        const matchTeacher = j.teacher_username?.toLowerCase().includes(q);
-        if (!matchTopic && !matchSubj && !matchTeacher) return false;
-      }
-      return true;
-    });
-
-    const sorted = [...result];
-    sorted.sort((a, b) => {
-      if (sortJournalBy === 'week_asc') return (Number(a.week_number) || 0) - (Number(b.week_number) || 0);
-      if (sortJournalBy === 'week_desc') return (Number(b.week_number) || 0) - (Number(a.week_number) || 0);
-      if (sortJournalBy === 'date_desc') return (b.timestamp || '').localeCompare(a.timestamp || '');
-      if (sortJournalBy === 'date_asc') return (a.timestamp || '').localeCompare(b.timestamp || '');
-      if (sortJournalBy === 'subject_asc') return (a.subject_name || '').localeCompare(b.subject_name || '');
-      return 0;
-    });
-
-    return sorted;
-  }, [journals, filterSubject, filterTeacher, searchJournalQuery, sortJournalBy]);
 
   // Group journals by week number
   const grouped = displayedJournals.reduce<Record<string, JournalEntry[]>>((acc: Record<string, JournalEntry[]>, j: JournalEntry) => {

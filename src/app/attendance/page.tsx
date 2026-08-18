@@ -33,6 +33,44 @@ function AttendanceContent() {
   const [submitted, setSubmitted] = useState(false);
 
   const [syncing, setSyncing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'HADIR' | 'ABSENT' | 'Sakit' | 'Izin' | 'Alpa'>('ALL');
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'absent_first' | 'present_first'>('name_asc');
+
+  // Filter & Sort students based on search query, status filter, and sort order
+  const displayedStudents = useMemo(() => {
+    let result = students.filter((s) =>
+      s.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (statusFilter === 'HADIR') {
+      result = result.filter((s) => !s.isAbsent);
+    } else if (statusFilter === 'ABSENT') {
+      result = result.filter((s) => s.isAbsent);
+    } else if (statusFilter === 'Sakit' || statusFilter === 'Izin' || statusFilter === 'Alpa') {
+      result = result.filter((s) => s.isAbsent && s.status === statusFilter);
+    }
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (sortBy === 'name_asc') {
+        return a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' });
+      }
+      if (sortBy === 'name_desc') {
+        return b.full_name.localeCompare(a.full_name, undefined, { sensitivity: 'base' });
+      }
+      if (sortBy === 'absent_first') {
+        if (a.isAbsent === b.isAbsent) return a.full_name.localeCompare(b.full_name);
+        return a.isAbsent ? -1 : 1;
+      }
+      if (sortBy === 'present_first') {
+        if (a.isAbsent === b.isAbsent) return a.full_name.localeCompare(b.full_name);
+        return !a.isAbsent ? -1 : 1;
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [students, searchQuery, statusFilter, sortBy]);
 
   // Fetch student list for the active class
   const fetchStudents = useCallback(async (targetClass: string) => {
@@ -185,46 +223,6 @@ function AttendanceContent() {
   };
 
   if (!user) return <PageLoader text="Memuat modul presensi siswa..." />;
-
-  // Filter students based on search query
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'HADIR' | 'ABSENT' | 'Sakit' | 'Izin' | 'Alpa'>('ALL');
-  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'absent_first' | 'present_first'>('name_asc');
-
-  // Filter & Sort students based on search query, status filter, and sort order
-  const displayedStudents = useMemo(() => {
-    let result = students.filter((s) =>
-      s.full_name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (statusFilter === 'HADIR') {
-      result = result.filter((s) => !s.isAbsent);
-    } else if (statusFilter === 'ABSENT') {
-      result = result.filter((s) => s.isAbsent);
-    } else if (statusFilter === 'Sakit' || statusFilter === 'Izin' || statusFilter === 'Alpa') {
-      result = result.filter((s) => s.isAbsent && s.status === statusFilter);
-    }
-
-    const sorted = [...result];
-    sorted.sort((a, b) => {
-      if (sortBy === 'name_asc') {
-        return a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' });
-      }
-      if (sortBy === 'name_desc') {
-        return b.full_name.localeCompare(a.full_name, undefined, { sensitivity: 'base' });
-      }
-      if (sortBy === 'absent_first') {
-        if (a.isAbsent === b.isAbsent) return a.full_name.localeCompare(b.full_name);
-        return a.isAbsent ? -1 : 1;
-      }
-      if (sortBy === 'present_first') {
-        if (a.isAbsent === b.isAbsent) return a.full_name.localeCompare(b.full_name);
-        return !a.isAbsent ? -1 : 1;
-      }
-      return 0;
-    });
-
-    return sorted;
-  }, [students, searchQuery, statusFilter, sortBy]);
 
   // Statistics calculation
   const totalCount = students.length;

@@ -94,6 +94,76 @@ function AdminContent() {
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Filtered & Sorted users list
+  const filteredUsers = useMemo(() => {
+    let result = users.filter((u) => {
+      const q = userSearch.toLowerCase();
+      const matchesSearch = !userSearch || u.username.toLowerCase().includes(q) || u.user_id.toLowerCase().includes(q) || (u.assigned_class && u.assigned_class.toLowerCase().includes(q));
+      const matchesRole = userRoleFilter === 'ALL' || u.role === userRoleFilter;
+      return matchesSearch && matchesRole;
+    });
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (userSortBy === 'name_asc') return a.username.localeCompare(b.username);
+      if (userSortBy === 'name_desc') return b.username.localeCompare(a.username);
+      if (userSortBy === 'role_asc') return a.role.localeCompare(b.role);
+      return 0;
+    });
+    return sorted;
+  }, [users, userSearch, userRoleFilter, userSortBy]);
+
+  // Filtered & Sorted student list
+  const filteredStudents = useMemo(() => {
+    let result = students.filter((s) => {
+      const q = studentSearch.toLowerCase();
+      const matchesSearch = !studentSearch || s.full_name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q);
+      const matchesClass = selectedClassFilter === 'ALL' || s.class_name === selectedClassFilter;
+      const isActive = s.is_active?.toUpperCase() === 'TRUE';
+      const matchesStatus = studentStatusFilter === 'ALL' || (studentStatusFilter === 'ACTIVE' ? isActive : !isActive);
+      return matchesSearch && matchesClass && matchesStatus;
+    });
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (studentSortBy === 'name_asc') return a.full_name.localeCompare(b.full_name);
+      if (studentSortBy === 'name_desc') return b.full_name.localeCompare(a.full_name);
+      if (studentSortBy === 'class_asc') return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
+      if (studentSortBy === 'active_first') {
+        const aAct = a.is_active?.toUpperCase() === 'TRUE';
+        const bAct = b.is_active?.toUpperCase() === 'TRUE';
+        if (aAct === bAct) return a.full_name.localeCompare(b.full_name);
+        return aAct ? -1 : 1;
+      }
+      if (studentSortBy === 'inactive_first') {
+        const aAct = a.is_active?.toUpperCase() === 'TRUE';
+        const bAct = b.is_active?.toUpperCase() === 'TRUE';
+        if (aAct === bAct) return a.full_name.localeCompare(b.full_name);
+        return !aAct ? -1 : 1;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [students, studentSearch, selectedClassFilter, studentStatusFilter, studentSortBy]);
+
+  // Filtered & Sorted subjects list
+  const filteredSubjects = useMemo(() => {
+    let result = subjects.filter((s) => {
+      const matchesSearch = !subjectSearch || s.name.toLowerCase().includes(subjectSearch.toLowerCase()) || s.subject_id.toLowerCase().includes(subjectSearch.toLowerCase());
+      const matchesType = selectedSubjectTypeFilter === 'ALL' || s.type === selectedSubjectTypeFilter;
+      return matchesSearch && matchesType;
+    });
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (subjectSortBy === 'name_asc') return a.name.localeCompare(b.name);
+      if (subjectSortBy === 'name_desc') return b.name.localeCompare(a.name);
+      if (subjectSortBy === 'type_asc') return a.type.localeCompare(b.type);
+      return 0;
+    });
+    return sorted;
+  }, [subjects, subjectSearch, selectedSubjectTypeFilter, subjectSortBy]);
+
   useEffect(() => {
     fetch('/api/auth/me')
       .then((r) => r.json())
@@ -399,76 +469,6 @@ function AdminContent() {
   const classList = Array.from(
     new Set(students.map((s) => s.class_name).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-
-  // Filtered & Sorted users list
-  const filteredUsers = useMemo(() => {
-    let result = users.filter((u) => {
-      const q = userSearch.toLowerCase();
-      const matchesSearch = !userSearch || u.username.toLowerCase().includes(q) || u.user_id.toLowerCase().includes(q) || (u.assigned_class && u.assigned_class.toLowerCase().includes(q));
-      const matchesRole = userRoleFilter === 'ALL' || u.role === userRoleFilter;
-      return matchesSearch && matchesRole;
-    });
-
-    const sorted = [...result];
-    sorted.sort((a, b) => {
-      if (userSortBy === 'name_asc') return a.username.localeCompare(b.username);
-      if (userSortBy === 'name_desc') return b.username.localeCompare(a.username);
-      if (userSortBy === 'role_asc') return a.role.localeCompare(b.role);
-      return 0;
-    });
-    return sorted;
-  }, [users, userSearch, userRoleFilter, userSortBy]);
-
-  // Filtered & Sorted student list
-  const filteredStudents = useMemo(() => {
-    let result = students.filter((s) => {
-      const q = studentSearch.toLowerCase();
-      const matchesSearch = !studentSearch || s.full_name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q);
-      const matchesClass = selectedClassFilter === 'ALL' || s.class_name === selectedClassFilter;
-      const isActive = s.is_active?.toUpperCase() === 'TRUE';
-      const matchesStatus = studentStatusFilter === 'ALL' || (studentStatusFilter === 'ACTIVE' ? isActive : !isActive);
-      return matchesSearch && matchesClass && matchesStatus;
-    });
-
-    const sorted = [...result];
-    sorted.sort((a, b) => {
-      if (studentSortBy === 'name_asc') return a.full_name.localeCompare(b.full_name);
-      if (studentSortBy === 'name_desc') return b.full_name.localeCompare(a.full_name);
-      if (studentSortBy === 'class_asc') return (a.class_name || '').localeCompare(b.class_name || '', undefined, { numeric: true });
-      if (studentSortBy === 'active_first') {
-        const aAct = a.is_active?.toUpperCase() === 'TRUE';
-        const bAct = b.is_active?.toUpperCase() === 'TRUE';
-        if (aAct === bAct) return a.full_name.localeCompare(b.full_name);
-        return aAct ? -1 : 1;
-      }
-      if (studentSortBy === 'inactive_first') {
-        const aAct = a.is_active?.toUpperCase() === 'TRUE';
-        const bAct = b.is_active?.toUpperCase() === 'TRUE';
-        if (aAct === bAct) return a.full_name.localeCompare(b.full_name);
-        return !aAct ? -1 : 1;
-      }
-      return 0;
-    });
-    return sorted;
-  }, [students, studentSearch, selectedClassFilter, studentStatusFilter, studentSortBy]);
-
-  // Filtered & Sorted subjects list
-  const filteredSubjects = useMemo(() => {
-    let result = subjects.filter((s) => {
-      const matchesSearch = !subjectSearch || s.name.toLowerCase().includes(subjectSearch.toLowerCase()) || s.subject_id.toLowerCase().includes(subjectSearch.toLowerCase());
-      const matchesType = selectedSubjectTypeFilter === 'ALL' || s.type === selectedSubjectTypeFilter;
-      return matchesSearch && matchesType;
-    });
-
-    const sorted = [...result];
-    sorted.sort((a, b) => {
-      if (subjectSortBy === 'name_asc') return a.name.localeCompare(b.name);
-      if (subjectSortBy === 'name_desc') return b.name.localeCompare(a.name);
-      if (subjectSortBy === 'type_asc') return a.type.localeCompare(b.type);
-      return 0;
-    });
-    return sorted;
-  }, [subjects, subjectSearch, selectedSubjectTypeFilter, subjectSortBy]);
 
   const intraCount = subjects.filter((s) => s.type === 'Intrakurikuler').length;
   const kokuCount = subjects.filter((s) => s.type === 'Kokurikuler').length;
