@@ -52,9 +52,41 @@ function formatPrivateKey(rawKey: string | undefined): string | undefined {
 function getSheets(): sheets_v4.Sheets {
   if (sheetsInstance) return sheetsInstance;
 
-  const client_email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-  const private_key = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+  let client_email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  let private_key = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
   const spreadsheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
+
+  // 1. Check if full JSON (raw or base64) is provided via GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_CREDENTIALS
+  const fullJsonRaw =
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+    process.env.GOOGLE_CREDENTIALS ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+
+  if (fullJsonRaw) {
+    try {
+      let jsonStr = fullJsonRaw.trim();
+      if (!jsonStr.startsWith('{')) {
+        jsonStr = Buffer.from(jsonStr, 'base64').toString('utf8');
+      }
+      if (jsonStr.startsWith('{')) {
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.client_email) client_email = parsed.client_email.trim();
+        if (parsed.private_key) private_key = formatPrivateKey(parsed.private_key);
+      }
+    } catch (e) {
+      console.error('Failed to parse full service account JSON:', e);
+    }
+  }
+
+  // 2. Check if private key alone was base64-encoded
+  const b64Key = process.env.GOOGLE_PRIVATE_KEY_BASE64;
+  if (b64Key && !private_key) {
+    try {
+      const decoded = Buffer.from(b64Key.trim(), 'base64').toString('utf8');
+      private_key = formatPrivateKey(decoded);
+    } catch {}
+  }
 
   if (!client_email) {
     throw new Error('Konfigurasi GOOGLE_SERVICE_ACCOUNT_EMAIL belum diisi di Environment Variables.');
