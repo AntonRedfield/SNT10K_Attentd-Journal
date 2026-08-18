@@ -2,16 +2,43 @@ import { google, sheets_v4 } from 'googleapis';
 
 let sheetsInstance: sheets_v4.Sheets | null = null;
 
-function formatPrivateKey(key: string | undefined): string | undefined {
-  if (!key) return undefined;
-  let cleaned = key.trim();
+function formatPrivateKey(rawKey: string | undefined): string | undefined {
+  if (!rawKey) return undefined;
+  let key = rawKey.trim();
+
+  // 1. Remove wrapping quotes (single or double)
   if (
-    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
-    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
   ) {
-    cleaned = cleaned.slice(1, -1);
+    key = key.slice(1, -1).trim();
   }
-  return cleaned.replace(/\\n/g, '\n');
+
+  // 2. Unescape escaped quotes if present
+  key = key.replace(/\\"/g, '"').replace(/\\'/g, "'");
+
+  // 3. Normalize all escaped newlines
+  key = key.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // 4. Reconstruct clean PEM if headers exist
+  const headerMatch = key.match(/-----BEGIN [A-Z ]+-----/);
+  const footerMatch = key.match(/-----END [A-Z ]+-----/);
+
+  if (headerMatch && footerMatch) {
+    const header = headerMatch[0];
+    const footer = footerMatch[0];
+    const headerIndex = key.indexOf(header);
+    const footerIndex = key.indexOf(footer);
+
+    const body = key
+      .substring(headerIndex + header.length, footerIndex)
+      .replace(/\s+/g, ''); // strip all spaces/newlines from base64 content
+
+    const chunks = body.match(/.{1,64}/g) || [body];
+    return `${header}\n${chunks.join('\n')}\n${footer}\n`;
+  }
+
+  return key;
 }
 
 function getSheets(): sheets_v4.Sheets {
