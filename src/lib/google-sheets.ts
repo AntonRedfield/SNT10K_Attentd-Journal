@@ -2,13 +2,28 @@ import { google, sheets_v4 } from 'googleapis';
 
 let sheetsInstance: sheets_v4.Sheets | null = null;
 
+function formatPrivateKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  let cleaned = key.trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned.replace(/\\n/g, '\n');
+}
+
 function getSheets(): sheets_v4.Sheets {
   if (sheetsInstance) return sheetsInstance;
 
+  const client_email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  const private_key = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+
   const auth = new google.auth.GoogleAuth({
     credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      client_email,
+      private_key,
     },
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });

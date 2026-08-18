@@ -17,12 +17,14 @@ export async function POST(request: NextRequest) {
     }
 
     const users = await getSheetRows<User>(SHEET_USERS);
-    const user = users.find(
-      (u) =>
-        (u.user_id?.trim().toLowerCase() === identifier.toLowerCase() ||
-          u.username?.trim().toLowerCase() === identifier.toLowerCase()) &&
-        u.password === password
-    );
+    const targetId = identifier.toLowerCase();
+
+    const user = users.find((u) => {
+      const uid = String(u.user_id ?? '').trim().toLowerCase();
+      const uname = String(u.username ?? '').trim().toLowerCase();
+      const upass = String(u.password ?? '').trim();
+      return (uid === targetId || uname === targetId) && upass === password;
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -34,10 +36,10 @@ export async function POST(request: NextRequest) {
     const canonicalRole = normalizeRole(user.role);
 
     const payload: SessionPayload = {
-      user_id: user.user_id,
-      username: user.username,
+      user_id: String(user.user_id || identifier),
+      username: String(user.username || identifier),
       role: canonicalRole,
-      assigned_class: user.assigned_class || 'ALL',
+      assigned_class: String(user.assigned_class || 'ALL'),
     };
 
     const token = await signToken(payload);
@@ -50,9 +52,9 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('Login error:', errMsg);
+    console.error('Login processing error:', errMsg, error);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan pada server saat memproses login.' },
+      { error: 'Terjadi kesalahan pada server saat memproses login.', details: errMsg },
       { status: 500 }
     );
   }
