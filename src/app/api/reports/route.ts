@@ -56,7 +56,11 @@ export async function GET(request: NextRequest) {
 
     const classList = Array.from(new Set(activeStudents.map((s) => s.class_name).filter(Boolean))).sort();
     const teacherList = Array.from(new Set(allUsers.filter((u) => u.role === 'Teacher' || u.role === 'Admin').map((u) => u.username))).sort();
-    const userList = Array.from(new Set(allUsers.map((u) => u.username).filter(Boolean))).sort();
+    const userList = allUsers.map((u) => ({
+      username: u.username || '',
+      role: u.role || '',
+      nip: u.nip || (u as any).NIP || '',
+    }));
     const subjectList = allSubjects.map((s) => ({ name: s.name, type: s.type }));
 
     // =========================================================================

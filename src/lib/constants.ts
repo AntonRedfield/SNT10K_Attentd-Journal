@@ -212,9 +212,10 @@ export function normalizeRole(role?: string): UserRole {
 export interface User {
   user_id: string;
   username: string;
-  password: string;
+  password?: string;
   role: UserRole;
   assigned_class: string;
+  nip?: string;
 }
 
 // Student interface

@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Create Users sheet with headers
     await createSheetTab(SHEET_USERS, [
-      'user_id', 'username', 'password', 'role', 'assigned_class',
+      'user_id', 'username', 'password', 'role', 'assigned_class', 'nip',
     ]);
     results.push('✅ Users sheet created');
 

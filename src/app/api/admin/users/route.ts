@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Akses khusus Administrator diperlukan.' }, { status: 403 });
     }
 
-    const { username, password, role, assigned_class } = await request.json();
+    const { username, password, role, assigned_class, nip } = await request.json();
 
     if (!username || !password || !role || !assigned_class) {
       return NextResponse.json({ error: 'Seluruh kolom pendaftaran pengguna wajib diisi.' }, { status: 400 });
@@ -40,7 +40,14 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = `U-${Date.now()}`;
-    await appendRow(SHEET_USERS, [userId, username.trim(), password.trim(), role, assigned_class.trim()]);
+    await appendRow(SHEET_USERS, [
+      userId,
+      username.trim(),
+      password.trim(),
+      role,
+      assigned_class.trim(),
+      nip ? nip.trim() : '',
+    ]);
 
     return NextResponse.json({ success: true, user_id: userId });
   } catch (error) {
@@ -56,7 +63,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Akses khusus Administrator diperlukan.' }, { status: 403 });
     }
 
-    const { user_id, username, password, role, assigned_class } = await request.json();
+    const { user_id, username, password, role, assigned_class, nip } = await request.json();
 
     if (!user_id || !username) {
       return NextResponse.json({ error: 'Parameter ID dan nama pengguna wajib disertakan.' }, { status: 400 });
@@ -85,6 +92,7 @@ export async function PUT(request: NextRequest) {
       finalPassword,
       role || existingUser.role,
       assigned_class ? assigned_class.trim() : (existingUser.assigned_class || 'ALL'),
+      nip !== undefined ? nip.trim() : (existingUser.nip || ''),
     ]);
 
     return NextResponse.json({ success: true });

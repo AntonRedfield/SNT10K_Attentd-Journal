@@ -80,9 +80,15 @@ function RecapContent() {
   const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
 
   // Metadata Lists
+  interface UserOption {
+    username: string;
+    role?: string;
+    nip?: string;
+  }
+
   const [classList, setClassList] = useState<string[]>([]);
   const [teacherList, setTeacherList] = useState<string[]>([]);
-  const [userList, setUserList] = useState<string[]>([]);
+  const [userList, setUserList] = useState<UserOption[]>([]);
   const [subjectList, setSubjectList] = useState<{ name: string; type: string }[]>([]);
 
   // Signature Config State (Nama, NIP & Jabatan Tanda Tangan)
@@ -93,6 +99,22 @@ function RecapContent() {
   const [rightSignRole, setRightSignRole] = useState<string>('Wakil Kepala Kesiswaan');
   const [rightSignName, setRightSignName] = useState<string>('');
   const [rightSignNip, setRightSignNip] = useState<string>('');
+
+  const handleSelectLeftUser = (selectedUsername: string) => {
+    setLeftSignName(selectedUsername);
+    const found = userList.find((u) => u.username === selectedUsername);
+    if (found && found.nip) {
+      setLeftSignNip(found.nip);
+    }
+  };
+
+  const handleSelectRightUser = (selectedUsername: string) => {
+    setRightSignName(selectedUsername);
+    const found = userList.find((u) => u.username === selectedUsername);
+    if (found && found.nip) {
+      setRightSignNip(found.nip);
+    }
+  };
 
   // Report Data
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRow[]>([]);
@@ -265,9 +287,12 @@ function RecapContent() {
         if (data.metadata.classList) setClassList(data.metadata.classList);
         if (data.metadata.teacherList) setTeacherList(data.metadata.teacherList);
         if (data.metadata.userList) {
-          setUserList(data.metadata.userList);
+          const list = data.metadata.userList.map((u: any) =>
+            typeof u === 'string' ? { username: u } : u
+          );
+          setUserList(list);
         } else if (data.metadata.teacherList) {
-          setUserList(data.metadata.teacherList);
+          setUserList(data.metadata.teacherList.map((t: string) => ({ username: t })));
         }
         if (data.metadata.subjectList) setSubjectList(data.metadata.subjectList);
       }
@@ -782,12 +807,12 @@ function RecapContent() {
                       className="input-field"
                       style={{ padding: '6px 10px', fontSize: '12px' }}
                       value={leftSignName}
-                      onChange={(e) => setLeftSignName(e.target.value)}
+                      onChange={(e) => handleSelectLeftUser(e.target.value)}
                     >
                       <option value="">-- Pilih dari Daftar Users --</option>
                       {userList.map((u) => (
-                        <option key={u} value={u}>
-                          👤 {u}
+                        <option key={u.username} value={u.username}>
+                          👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
                         </option>
                       ))}
                     </select>
@@ -879,12 +904,12 @@ function RecapContent() {
                       className="input-field"
                       style={{ padding: '6px 10px', fontSize: '12px' }}
                       value={rightSignName}
-                      onChange={(e) => setRightSignName(e.target.value)}
+                      onChange={(e) => handleSelectRightUser(e.target.value)}
                     >
                       <option value="">-- Pilih dari Daftar Users --</option>
                       {userList.map((u) => (
-                        <option key={u} value={u}>
-                          👤 {u}
+                        <option key={u.username} value={u.username}>
+                          👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
                         </option>
                       ))}
                     </select>

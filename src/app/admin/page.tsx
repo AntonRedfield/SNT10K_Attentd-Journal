@@ -24,6 +24,7 @@ interface UserRow {
   username: string;
   role: UserRole;
   assigned_class: string;
+  nip?: string;
 }
 
 interface StudentRow {
@@ -51,6 +52,7 @@ function AdminContent() {
     password: '',
     role: 'Teacher' as UserRole,
     assigned_class: 'X TKJ 1',
+    nip: '',
   });
   const [addingUser, setAddingUser] = useState(false);
 
@@ -261,7 +263,7 @@ function AdminContent() {
       const data = await res.json();
       if (data.success) {
         showToast('Akun pengguna baru berhasil ditambahkan!', 'success');
-        setNewUser({ username: '', password: '', role: 'Teacher', assigned_class: 'X TKJ 1' });
+        setNewUser({ username: '', password: '', role: 'Teacher', assigned_class: 'X TKJ 1', nip: '' });
         setShowAddUser(false);
         fetchUsers();
       } else {
