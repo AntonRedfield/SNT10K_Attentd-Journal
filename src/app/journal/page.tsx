@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { ToastProvider, useToast } from '@/components/Toast';
@@ -14,6 +14,7 @@ import {
   SUBJECT_TYPE_CONFIG,
   normalizeRole,
 } from '@/lib/constants';
+import { processJournalPhoto, formatBytes } from '@/lib/image-compression';
 
 function JournalContent() {
   const router = useRouter();
@@ -28,11 +29,28 @@ function JournalContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Form State
+  // Form State & Edit State
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [subjectName, setSubjectName] = useState<string>('');
   const [weekNumber, setWeekNumber] = useState('1');
   const [topic, setTopic] = useState('');
   const [filterSubject, setFilterSubject] = useState('ALL');
+
+  // Single Photo Upload State
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [processingPhoto, setProcessingPhoto] = useState(false);
+  const [photoStats, setPhotoStats] = useState<{
+    originalSize: number;
+    finalSize: number;
+    originalDim: string;
+    finalDim: string;
+    wasAdjusted: boolean;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Full-size image preview modal
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string } | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [searchJournalQuery, setSearchJournalQuery] = useState('');
@@ -157,31 +175,120 @@ function JournalContent() {
     }
   }, [selectedClass, fetchJournals]);
 
+  // Handle Photo Selection & Auto-scaling/Compression
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('File yang dipilih harus berupa gambar (JPG, PNG, WEBP, dll).', 'error');
+      return;
+    }
+
+    setProcessingPhoto(true);
+    try {
+      const result = await processJournalPhoto(file);
+      setSelectedPhoto(result.file);
+      setPhotoPreview(result.previewUrl);
+      setPhotoStats({
+        originalSize: result.originalSize,
+        finalSize: result.finalSize,
+        originalDim: `${result.originalWidth}×${result.originalHeight}`,
+        finalDim: `${result.finalWidth}×${result.finalHeight}`,
+        wasAdjusted: result.wasAdjusted,
+      });
+
+      if (result.wasAdjusted) {
+        showToast(`Foto disesuaikan ke resolusi 1080p & ukuran ${formatBytes(result.finalSize)}.`, 'info');
+      }
+    } catch (err) {
+      console.error('Photo processing error:', err);
+      showToast('Gagal memproses gambar. Coba pilih file foto lain.', 'error');
+      handleRemovePhoto();
+    } finally {
+      setProcessingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    if (photoPreview && photoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(photoPreview);
+    }
+    setSelectedPhoto(null);
+    setPhotoPreview(null);
+    setPhotoStats(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleStartEdit = (entry: JournalEntry) => {
+    setEditingEntry(entry);
+    setSubjectName(entry.subject_name || '');
+    setWeekNumber(entry.week_number || '1');
+    setTopic(entry.topic || '');
+    setSelectedPhoto(null);
+    setPhotoPreview(entry.photo_url || null);
+    setPhotoStats(null);
+
+    // Scroll smoothly to form
+    const formElement = document.getElementById('journal-form-card');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEntry(null);
+    setSubjectName('');
+    setWeekNumber('1');
+    setTopic('');
+    handleRemovePhoto();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedClass) return;
 
     setSubmitting(true);
     try {
+      const formData = new FormData();
+      formData.append('class_name', selectedClass);
+      formData.append('subject_name', subjectName.trim());
+      formData.append('week_number', weekNumber);
+      formData.append('topic', topic.trim());
+
+      if (editingEntry) {
+        formData.append('journal_id', editingEntry.journal_id);
+        if (!photoPreview && !selectedPhoto) {
+          formData.append('remove_photo', 'true');
+        }
+      }
+
+      if (selectedPhoto) {
+        formData.append('photo', selectedPhoto, selectedPhoto.name);
+      }
+
+      const method = editingEntry ? 'PUT' : 'POST';
       const res = await fetch('/api/journal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          class_name: selectedClass,
-          subject_name: subjectName.trim(),
-          week_number: weekNumber,
-          topic: topic.trim(),
-        }),
+        method,
+        body: formData,
       });
 
       const data = await res.json();
       if (data.success) {
-        showToast('Catatan jurnal agenda mengajar berhasil ditambahkan!', 'success');
-        setSubjectName('');
-        setTopic('');
+        showToast(
+          editingEntry
+            ? 'Catatan agenda mengajar berhasil diperbarui!'
+            : 'Catatan agenda mengajar & foto dokumentasi berhasil disimpan!',
+          'success'
+        );
+        handleCancelEdit();
         fetchJournals(selectedClass);
       } else {
-        showToast(data.error || 'Gagal menambahkan catatan jurnal', 'error');
+        showToast(data.error || 'Gagal menyimpan catatan jurnal', 'error');
       }
     } catch {
       showToast('Terjadi kendala jaringan saat menyimpan jurnal', 'error');
@@ -271,11 +378,10 @@ function JournalContent() {
                 Jurnal Agenda Mengajar
               </h1>
               <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                Dokumentasi materi dan capaian pembelajaran kelas <strong>{selectedClass}</strong>
+                Dokumentasi materi, capaian pembelajaran, dan foto kegiatan kelas <strong>{selectedClass}</strong>
               </p>
             </div>
 
-            {/* Class Selector for Admin */}
             {/* Class Selector & Sync Button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               {(user.role === 'Admin' || user.role === 'Teacher' || !user.assigned_class || user.assigned_class.toUpperCase() === 'ALL') && availableClasses.length > 0 && (
@@ -319,20 +425,35 @@ function JournalContent() {
           </div>
         </div>
 
-        {/* Add Journal Form Card */}
+        {/* Add / Edit Journal Form Card */}
         <div
+          id="journal-form-card"
           className="glass-card"
           style={{
             padding: 'clamp(16px, 3vw, 24px)',
             marginBottom: '24px',
-            border: '1px solid var(--border)',
+            border: editingEntry ? '2px solid #0284c7' : '1px solid var(--border)',
+            background: editingEntry ? 'linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%)' : '#ffffff',
+            transition: 'all 0.3s ease',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-            <span style={{ fontSize: '18px' }}>📝</span>
-            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Tambah Catatan Agenda Pembelajaran
-            </h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '18px' }}>{editingEntry ? '✏️' : '📝'}</span>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {editingEntry ? 'Edit Catatan Agenda Mengajar' : 'Tambah Catatan Agenda & Dokumentasi Foto'}
+              </h2>
+            </div>
+            {editingEntry && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '12px', padding: '5px 12px' }}
+              >
+                ✕ Batal Edit
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -438,26 +559,155 @@ function JournalContent() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={submitting}
-                style={{ padding: '10px 22px' }}
+            {/* Photo preview strip (shown after selecting a photo) */}
+            {photoPreview && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '10px 14px',
+                  background: '#f0f9ff',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  flexWrap: 'wrap',
+                }}
               >
-                {submitting ? (
-                  <>
-                    <Spinner /> Menyimpan Jurnal...
-                  </>
+                {/* Thumbnail */}
+                <div
+                  onClick={() => setLightboxPhoto({ url: photoPreview, title: 'Pratinjau Foto Dokumentasi' })}
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '6px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    border: '1px solid #cbd5e1',
+                  }}
+                  title="Klik untuk melihat ukuran penuh"
+                >
+                  <img
+                    src={photoPreview}
+                    alt="Pratinjau Foto"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: '120px' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                    📸 {selectedPhoto?.name}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    {formatBytes(photoStats?.finalSize || 0)} • {photoStats?.finalDim}
+                    {photoStats?.wasAdjusted && (
+                      <span style={{
+                        marginLeft: '6px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        background: '#dbeafe',
+                        color: '#1d4ed8',
+                      }}>
+                        Disesuaikan
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Remove */}
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ef4444',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: '4px 8px',
+                  }}
+                >
+                  ✕ Hapus
+                </button>
+              </div>
+            )}
+
+            {/* Action Row: Upload Photo (left) + Submit (right) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoSelect}
+                style={{ display: 'none' }}
+                id="journal-photo-input"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={processingPhoto}
+                className="btn btn-secondary"
+                style={{
+                  padding: '10px 18px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  border: photoPreview ? '1px solid #10b981' : '1px solid #0284c7',
+                  color: photoPreview ? '#059669' : '#0284c7',
+                  background: photoPreview ? '#ecfdf5' : '#f0f9ff',
+                }}
+              >
+                {processingPhoto ? (
+                  <><Spinner /> Memproses...</>
+                ) : photoPreview ? (
+                  '📷 Ganti Foto'
                 ) : (
-                  '+ Simpan Catatan Jurnal'
+                  '📷 Unggah Foto Dokumentasi'
                 )}
               </button>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {editingEntry && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="btn btn-secondary"
+                    style={{ padding: '10px 18px' }}
+                  >
+                    Batal Edit
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || processingPhoto}
+                  style={{ padding: '10px 22px' }}
+                >
+                  {submitting ? (
+                    <>
+                      <Spinner /> {editingEntry ? 'Menyimpan Perubahan...' : 'Menyimpan & Mengunggah Foto ke Drive...'}
+                    </>
+                  ) : editingEntry ? (
+                    '💾 Simpan Perubahan Edit'
+                  ) : (
+                    '+ Simpan Catatan Jurnal'
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </div>
 
-        {/* Filter & Sorting Controls Toolbar (Available for all roles) */}
+        {/* Filter & Sorting Controls Toolbar */}
         <div
           className="glass-card"
           style={{
@@ -582,7 +832,7 @@ function JournalContent() {
               Belum Ada Catatan Jurnal
             </div>
             <p style={{ fontSize: '13.5px' }}>
-              Gunakan formulir di atas untuk mencatat agenda dan materi ajar pertama kelas ini.
+              Gunakan formulir di atas untuk mencatat agenda, materi ajar, dan foto kegiatan kelas ini.
             </p>
           </div>
         ) : (
@@ -642,9 +892,61 @@ function JournalContent() {
                         justifyContent: 'space-between',
                         gap: '16px',
                         background: '#ffffff',
+                        flexWrap: 'wrap',
                       }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Photo Thumbnail if attached */}
+                      {entry.photo_url && (
+                        <div
+                          onClick={() =>
+                            setLightboxPhoto({
+                              url: entry.photo_url!,
+                              title: `${entry.subject_name} (Minggu Ke-${entry.week_number})`,
+                            })
+                          }
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                            border: '1px solid #e2e8f0',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.06)',
+                            position: 'relative',
+                          }}
+                          title="Klik untuk memperbesar foto dokumentasi"
+                        >
+                          <img
+                            src={entry.photo_url}
+                            alt="Dokumentasi"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              // If direct lh3 url has issues, fallback to proxy
+                              if (entry.photo_url?.includes('/d/')) {
+                                const id = entry.photo_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+                                if (id) (e.currentTarget as HTMLImageElement).src = `/api/drive-image?id=${id}`;
+                              }
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              right: 0,
+                              background: 'rgba(0,0,0,0.6)',
+                              color: '#fff',
+                              fontSize: '9px',
+                              padding: '1px 3px',
+                              borderTopLeftRadius: '4px',
+                            }}
+                          >
+                            🔍
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ flex: 1, minWidth: '220px' }}>
                         <div
                           style={{
                             display: 'flex',
@@ -685,6 +987,23 @@ function JournalContent() {
                               👤 {entry.teacher_username}
                             </span>
                           )}
+                          {entry.photo_url && (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                color: '#1d4ed8',
+                                background: '#eff6ff',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #bfdbfe',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                              }}
+                            >
+                              📷 Foto Terlampir
+                            </span>
+                          )}
                         </div>
                         <div
                           style={{
@@ -697,36 +1016,136 @@ function JournalContent() {
                         </div>
                       </div>
 
-                      {entry.timestamp && (
-                        <span
-                          style={{
-                            fontSize: '11.5px',
-                            color: 'var(--text-muted)',
-                            background: '#f0f2f5',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid #e4e6eb',
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {entry.timestamp}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                        {entry.timestamp && (
+                          <span
+                            style={{
+                              fontSize: '11.5px',
+                              color: 'var(--text-muted)',
+                              background: '#f0f2f5',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #e4e6eb',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {entry.timestamp.slice(0, 10)}
+                          </span>
+                        )}
 
-                      <button
-                        onClick={() => setDeleteTargetId(entry.journal_id)}
-                        className="btn btn-danger btn-sm"
-                        style={{ flexShrink: 0, padding: '6px 12px', fontSize: '12px' }}
-                        title="Hapus catatan agenda ini"
-                      >
-                        Hapus
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(entry)}
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            color: '#0284c7',
+                            borderColor: '#bae6fd',
+                            background: '#f0f9ff',
+                          }}
+                          title="Edit catatan agenda ini"
+                        >
+                          ✏️ Edit
+                        </button>
+
+                        <button
+                          onClick={() => setDeleteTargetId(entry.journal_id)}
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '6px 12px', fontSize: '12px' }}
+                          title="Hapus catatan agenda ini"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Lightbox Photo Preview Modal */}
+        {lightboxPhoto && (
+          <div
+            className="modal-overlay"
+            onClick={() => setLightboxPhoto(null)}
+            style={{ zIndex: 1000 }}
+          >
+            <div
+              className="modal-card page-enter"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '720px',
+                width: '90%',
+                padding: '16px',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                  {lightboxPhoto.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: '70vh',
+                  overflow: 'auto',
+                  borderRadius: '8px',
+                  background: '#0f172a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '14px',
+                }}
+              >
+                <img
+                  src={lightboxPhoto.url}
+                  alt={lightboxPhoto.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '68vh',
+                    objectFit: 'contain',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <a
+                  href={lightboxPhoto.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '12px' }}
+                >
+                  Buka Gambar di Tab Baru ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(null)}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: '12px' }}
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

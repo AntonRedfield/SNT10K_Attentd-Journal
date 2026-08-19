@@ -233,6 +233,9 @@ export interface AttendanceRecord {
   recorded_by_username: string;
 }
 
+// Google Drive folder for journal attachments
+export const DEFAULT_DRIVE_FOLDER_ID = '1ynz049ZQPhM6v03LOtl6-_ZBXeUVpKYq';
+
 // Journal entry
 export interface JournalEntry {
   journal_id: string;
@@ -242,6 +245,7 @@ export interface JournalEntry {
   week_number: string;
   topic: string;
   teacher_username: string;
+  photo_url?: string;
 }
 
 // Session payload (JWT)
@@ -251,3 +255,4 @@ export interface SessionPayload {
   role: UserRole;
   assigned_class: string;
 }
+

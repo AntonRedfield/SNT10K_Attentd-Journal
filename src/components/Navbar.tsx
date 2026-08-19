@@ -177,6 +177,94 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
             </div>
           </button>
 
+          {/* Main Navigation Links */}
+          <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="btn btn-sm"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                padding: '6px 10px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+              }}
+            >
+              Dasbor
+            </button>
+            <button
+              onClick={() => router.push('/attendance')}
+              className="btn btn-sm"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                padding: '6px 10px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+              }}
+            >
+              Presensi
+            </button>
+            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
+              <button
+                onClick={() => router.push('/journal')}
+                className="btn btn-sm"
+                style={{
+                  background: 'rgba(14, 165, 233, 0.1)',
+                  border: '1px solid rgba(14, 165, 233, 0.3)',
+                  color: '#0284c7',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  padding: '6px 11px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                }}
+              >
+                📖 Jurnal Mengajar
+              </button>
+            )}
+            <button
+              onClick={() => router.push('/recap')}
+              className="btn btn-sm"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                padding: '6px 10px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+              }}
+            >
+              Rekap Laporan
+            </button>
+            {currentRole === 'Admin' && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="btn btn-sm"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                }}
+              >
+                Admin
+              </button>
+            )}
+          </div>
+
           {/* User Info Bar (Gear | Username | Role) + Logout Button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             {/* Unified User Info Pill */}

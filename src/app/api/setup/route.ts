@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     // 4. Create Journals sheet with headers
     await createSheetTab(SHEET_JOURNALS, [
       'journal_id', 'timestamp', 'class_name', 'subject_name',
-      'week_number', 'topic', 'teacher_username',
+      'week_number', 'topic', 'teacher_username', 'photo_url',
     ]);
     results.push('✅ Journals sheet created');
 

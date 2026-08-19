@@ -39,6 +39,7 @@ interface JournalRow {
   week_number: string;
   topic: string;
   teacher_username: string;
+  photo_url?: string;
 }
 
 const MONTH_NAMES = [
@@ -93,6 +94,7 @@ function RecapContent() {
   const [attendanceSortBy, setAttendanceSortBy] = useState<'name_asc' | 'name_desc' | 'alpa_desc' | 'sakit_desc' | 'izin_desc' | 'rate_desc' | 'rate_asc'>('name_asc');
   const [journalSearch, setJournalSearch] = useState('');
   const [journalSortBy, setJournalSortBy] = useState<'date_asc' | 'date_desc' | 'week_asc' | 'week_desc' | 'teacher_asc' | 'subject_asc'>('date_asc');
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string } | null>(null);
 
   const displayedAttendanceRecords = useMemo(() => {
     let result = attendanceRecords.filter((r) => {
@@ -869,9 +871,10 @@ function RecapContent() {
                   <thead>
                     <tr>
                       <th style={{ width: '38px', textAlign: 'center' }}>No</th>
-                      <th style={{ width: '95px', textAlign: 'center' }}>Minggu Ke-</th>
-                      <th style={{ width: '110px', textAlign: 'center' }}>Tanggal</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Minggu Ke-</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Tanggal</th>
                       <th style={{ textAlign: 'left' }}>Uraian Materi Pembelajaran (Details)</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Dokumentasi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -889,6 +892,34 @@ function RecapContent() {
                             <div style={{ fontSize: '11px', color: '#666666', marginTop: '2px' }}>
                               Kelas {j.class_name} &bull; Diinput oleh: {j.teacher_username}
                             </div>
+                          </td>
+                          <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                            {j.photo_url ? (
+                              <div
+                                style={{ cursor: 'pointer', display: 'inline-block' }}
+                                onClick={() =>
+                                  setLightboxPhoto({
+                                    url: j.photo_url!,
+                                    title: `Dokumentasi: ${j.subject_name} (Minggu ${j.week_number})`,
+                                  })
+                                }
+                                title="Klik untuk melihat foto ukuran penuh"
+                              >
+                                <img
+                                  src={j.photo_url}
+                                  alt="Dokumentasi"
+                                  className="report-photo-thumb"
+                                  onError={(e) => {
+                                    if (j.photo_url?.includes('/d/')) {
+                                      const id = j.photo_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+                                      if (id) (e.currentTarget as HTMLImageElement).src = `/api/drive-image?id=${id}`;
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <span style={{ color: '#999999', fontSize: '11px' }}>-</span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -917,11 +948,12 @@ function RecapContent() {
                   <thead>
                     <tr>
                       <th style={{ width: '38px', textAlign: 'center' }}>No</th>
-                      <th style={{ width: '130px', textAlign: 'left' }}>Nama Guru</th>
-                      <th style={{ width: '120px', textAlign: 'left' }}>Mata Pelajaran</th>
-                      <th style={{ width: '85px', textAlign: 'center' }}>Minggu</th>
-                      <th style={{ width: '95px', textAlign: 'center' }}>Tanggal</th>
+                      <th style={{ width: '120px', textAlign: 'left' }}>Nama Guru</th>
+                      <th style={{ width: '110px', textAlign: 'left' }}>Mata Pelajaran</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Minggu</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Tanggal</th>
                       <th style={{ textAlign: 'left' }}>Topik Pembelajaran (Details)</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Dokumentasi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -942,6 +974,34 @@ function RecapContent() {
                           </td>
                           <td style={{ textAlign: 'center' }}>{cleanDate}</td>
                           <td style={{ lineHeight: 1.4 }}>{j.topic}</td>
+                          <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                            {j.photo_url ? (
+                              <div
+                                style={{ cursor: 'pointer', display: 'inline-block' }}
+                                onClick={() =>
+                                  setLightboxPhoto({
+                                    url: j.photo_url!,
+                                    title: `Dokumentasi: ${j.subject_name} - ${j.teacher_username} (Minggu ${j.week_number})`,
+                                  })
+                                }
+                                title="Klik untuk melihat foto ukuran penuh"
+                              >
+                                <img
+                                  src={j.photo_url}
+                                  alt="Dokumentasi"
+                                  className="report-photo-thumb"
+                                  onError={(e) => {
+                                    if (j.photo_url?.includes('/d/')) {
+                                      const id = j.photo_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+                                      if (id) (e.currentTarget as HTMLImageElement).src = `/api/drive-image?id=${id}`;
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <span style={{ color: '#999999', fontSize: '11px' }}>-</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -1084,6 +1144,24 @@ function RecapContent() {
           background: #fafafa;
         }
 
+        .report-photo-thumb {
+          max-height: 50px;
+          max-width: 75px;
+          width: auto;
+          height: auto;
+          object-fit: cover;
+          border-radius: 4px;
+          border: 1px solid #cbd5e1;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+          display: block;
+          margin: 0 auto;
+          transition: transform 0.15s ease;
+        }
+
+        .report-photo-thumb:hover {
+          transform: scale(1.05);
+        }
+
         .signature-section {
           margin-top: 36px;
           display: flex;
@@ -1133,8 +1211,104 @@ function RecapContent() {
             background: transparent !important;
             -webkit-print-color-adjust: exact;
           }
+
+          .ink-saver-table tr {
+            page-break-inside: avoid;
+          }
+
+          .report-photo-thumb {
+            max-height: 46px !important;
+            max-width: 70px !important;
+            border: 1px solid #333333 !important;
+            box-shadow: none !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
+
+      {/* Lightbox Photo Preview Modal */}
+      {lightboxPhoto && (
+        <div
+          className="modal-overlay no-print"
+          onClick={() => setLightboxPhoto(null)}
+          style={{ zIndex: 1000 }}
+        >
+          <div
+            className="modal-card page-enter"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '720px',
+              width: '90%',
+              padding: '16px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                {lightboxPhoto.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLightboxPhoto(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '18px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                maxHeight: '70vh',
+                overflow: 'auto',
+                borderRadius: '8px',
+                background: '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '14px',
+              }}
+            >
+              <img
+                src={lightboxPhoto.url}
+                alt={lightboxPhoto.title}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '68vh',
+                  objectFit: 'contain',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <a
+                href={lightboxPhoto.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '12px' }}
+              >
+                Buka Gambar di Tab Baru ↗
+              </a>
+              <button
+                type="button"
+                onClick={() => setLightboxPhoto(null)}
+                className="btn btn-primary btn-sm"
+                style={{ fontSize: '12px' }}
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

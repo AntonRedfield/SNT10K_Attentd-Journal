@@ -1,4 +1,6 @@
-import { google, sheets_v4 } from 'googleapis';
+import { google, sheets_v4, Auth } from 'googleapis';
+import fs from 'fs';
+import path from 'path';
 
 let sheetsInstance: sheets_v4.Sheets | null = null;
 
@@ -49,12 +51,31 @@ function formatPrivateKey(rawKey: string | undefined): string | undefined {
   return key;
 }
 
-function getSheets(): sheets_v4.Sheets {
-  if (sheetsInstance) return sheetsInstance;
+export function getGoogleAuth(): Auth.GoogleAuth {
+  // 0. Check if physical JSON service account file exists on disk
+  try {
+    const possiblePaths = [
+      path.join(process.cwd(), 'src', 'lib', 'absensi-snt-10-kupang-52cc0f517847.json'),
+      path.join(process.cwd(), 'absensi-snt-10-kupang-52cc0f517847.json'),
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        return new google.auth.GoogleAuth({
+          keyFile: p,
+          scopes: [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive',
+          ],
+        });
+      }
+    }
+  } catch {
+    // Fall back to env vars
+  }
 
   let client_email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   let private_key = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
-  const spreadsheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
+
 
   // 1. Check if full JSON (raw or base64) is provided via GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_CREDENTIALS
   const fullJsonRaw =
@@ -94,21 +115,32 @@ function getSheets(): sheets_v4.Sheets {
   if (!private_key) {
     throw new Error('Konfigurasi GOOGLE_PRIVATE_KEY belum diisi di Environment Variables.');
   }
-  if (!spreadsheetId) {
-    throw new Error('Konfigurasi GOOGLE_SHEET_ID belum diisi di Environment Variables.');
-  }
 
-  const auth = new google.auth.GoogleAuth({
+  return new google.auth.GoogleAuth({
     credentials: {
       client_email,
       private_key,
     },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive',
+    ],
   });
+}
 
+function getSheets(): sheets_v4.Sheets {
+  if (sheetsInstance) return sheetsInstance;
+
+  const spreadsheetId = (process.env.GOOGLE_SHEET_ID || '').trim();
+  if (!spreadsheetId) {
+    throw new Error('Konfigurasi GOOGLE_SHEET_ID belum diisi di Environment Variables.');
+  }
+
+  const auth = getGoogleAuth();
   sheetsInstance = google.sheets({ version: 'v4', auth });
   return sheetsInstance;
 }
+
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '';
 
@@ -162,6 +194,10 @@ export async function getSheetRows<T = Record<string, string>>(
       headers.forEach((header, i) => {
         obj[header] = row[i] || '';
       });
+      // Fallback for Journals if photo_url was appended before header update
+      if (sheetName === 'Journals' && !obj.photo_url && row[7]) {
+        obj.photo_url = row[7];
+      }
       return obj as T;
     });
   });

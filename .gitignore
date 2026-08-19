@@ -30,9 +30,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# env files & credentials
 .env*
 !.env.example
+*.json
+!package.json
+!tsconfig.json
+!package-lock.json
 
 # vercel
 .vercel

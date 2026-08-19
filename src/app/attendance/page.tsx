@@ -307,6 +307,25 @@ function AttendanceContent() {
                 <SyncIcon size={14} className={syncing ? 'animate-spin' : ''} />
                 <span>{syncing ? 'Menyinkronkan...' : 'Sinkron Kelas'}</span>
               </button>
+
+              {(user.role === 'Admin' || user.role === 'Teacher') && (
+                <button
+                  type="button"
+                  onClick={() => router.push('/journal')}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: '12.5px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#0284c7',
+                  }}
+                  title="Buka modul Jurnal Mengajar untuk kelas ini"
+                >
+                  <span>📖 Jurnal Mengajar</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
