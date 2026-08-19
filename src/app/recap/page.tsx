@@ -1009,12 +1009,12 @@ function RecapContent() {
                     <tr>
                       <th style={{ width: '38px', textAlign: 'center' }}>No</th>
                       <th style={{ textAlign: 'left' }}>Nama Siswa</th>
-                      <th style={{ width: '70px', textAlign: 'center' }}>Kelas</th>
-                      <th style={{ width: '70px', textAlign: 'center' }}>NIS/ID</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Kelas</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>ID Siswa</th>
                       <th style={{ width: '65px', textAlign: 'center' }}>Sakit (S)</th>
                       <th style={{ width: '65px', textAlign: 'center' }}>Izin (I)</th>
-                      <th style={{ width: '65px', textAlign: 'center' }}>Alpa (A)</th>
-                      <th style={{ width: '65px', textAlign: 'center' }}>Hadir (H)</th>
+                      <th style={{ width: '65px', textAlign: 'center' }}>Absen (A)</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Hadir (H)</th>
                       <th style={{ width: '80px', textAlign: 'center' }}>% Hadir</th>
                     </tr>
                   </thead>
@@ -1023,12 +1023,15 @@ function RecapContent() {
                       <tr key={row.no}>
                         <td style={{ textAlign: 'center' }}>{row.no}</td>
                         <td style={{ fontWeight: 600, color: '#000000' }}>{row.full_name}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e3863' }}>
+                          {row.class_name}
+                        </td>
                         <td style={{ textAlign: 'center', fontSize: '11px', color: '#555555' }}>
                           {row.student_id}
                         </td>
                         <td style={{ textAlign: 'center', fontWeight: row.sakit > 0 ? 700 : 400 }}>{row.sakit}</td>
                         <td style={{ textAlign: 'center', fontWeight: row.izin > 0 ? 700 : 400 }}>{row.izin}</td>
-                        <td style={{ textAlign: 'center', fontWeight: row.alpa > 0 ? 700 : 400 }}>{row.alpa}</td>
+                        <td style={{ textAlign: 'center', fontWeight: row.alpa > 0 ? 700 : 400, color: row.alpa > 0 ? '#c62828' : 'inherit' }}>{row.alpa}</td>
                         <td style={{ textAlign: 'center' }}>{row.hadir}</td>
                         <td style={{ textAlign: 'center', fontWeight: 700 }}>{row.percentage}%</td>
                       </tr>
@@ -1037,7 +1040,7 @@ function RecapContent() {
                   {attendanceSummary && (
                     <tfoot>
                       <tr style={{ fontWeight: 700, background: '#fdfdfd' }}>
-                        <td colSpan={3} style={{ textAlign: 'center' }}>
+                        <td colSpan={4} style={{ textAlign: 'center' }}>
                           TOTAL REKAPITULASI KELAS
                         </td>
                         <td style={{ textAlign: 'center' }}>{attendanceSummary.totalSakit}</td>

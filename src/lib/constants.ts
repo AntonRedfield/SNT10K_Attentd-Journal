@@ -166,12 +166,16 @@ export const STATUS_CONFIG: Record<string, StatusConfig> = {
   },
 };
 
-// Normalize status to standard Indonesian term
-export function normalizeStatus(status: string): 'Hadir' | 'Sakit' | 'Izin' | 'Alpa' {
-  if (status === 'Present' || status === 'Hadir') return 'Hadir';
-  if (status === 'Sick' || status === 'Sakit') return 'Sakit';
-  if (status === 'Permitted' || status === 'Izin') return 'Izin';
-  return 'Alpa';
+// Normalize status to standard Indonesian term ('Hadir' | 'Sakit' | 'Izin' | 'Alpa')
+export function normalizeStatus(status?: string): 'Hadir' | 'Sakit' | 'Izin' | 'Alpa' {
+  if (!status) return 'Hadir';
+  const s = status.toString().trim().toLowerCase();
+
+  if (s === 'sakit' || s === 'sick' || s === 's') return 'Sakit';
+  if (s === 'izin' || s === 'permitted' || s === 'i') return 'Izin';
+  if (s === 'alpa' || s === 'unpermitted' || s === 'a' || s === 'absent' || s === 'tidak hadir' || s === 'unattend') return 'Alpa';
+
+  return 'Hadir';
 }
 
 // Normalize role to canonical UserRole ('Admin' | 'Teacher' | 'PIC')
