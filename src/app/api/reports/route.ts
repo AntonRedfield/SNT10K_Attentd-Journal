@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
 
     const classList = Array.from(new Set(activeStudents.map((s) => s.class_name).filter(Boolean))).sort();
     const teacherList = Array.from(new Set(allUsers.filter((u) => u.role === 'Teacher' || u.role === 'Admin').map((u) => u.username))).sort();
+    const userList = Array.from(new Set(allUsers.map((u) => u.username).filter(Boolean))).sort();
     const subjectList = allSubjects.map((s) => ({ name: s.name, type: s.type }));
 
     // =========================================================================
@@ -133,6 +134,8 @@ export async function GET(request: NextRequest) {
         },
         metadata: {
           classList,
+          teacherList,
+          userList,
         },
         summary: {
           totalStudents: aggregatedStudents.length,
@@ -178,6 +181,7 @@ export async function GET(request: NextRequest) {
         metadata: {
           classList,
           teacherList,
+          userList,
           subjectList,
         },
         summary: {

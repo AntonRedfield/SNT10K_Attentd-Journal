@@ -82,7 +82,17 @@ function RecapContent() {
   // Metadata Lists
   const [classList, setClassList] = useState<string[]>([]);
   const [teacherList, setTeacherList] = useState<string[]>([]);
+  const [userList, setUserList] = useState<string[]>([]);
   const [subjectList, setSubjectList] = useState<{ name: string; type: string }[]>([]);
+
+  // Signature Config State (Nama, NIP & Jabatan Tanda Tangan)
+  const [leftSignRole, setLeftSignRole] = useState<string>('Kepala Sekolah SNT 10 Kupang');
+  const [leftSignName, setLeftSignName] = useState<string>('');
+  const [leftSignNip, setLeftSignNip] = useState<string>('');
+
+  const [rightSignRole, setRightSignRole] = useState<string>('Wakil Kepala Kesiswaan');
+  const [rightSignName, setRightSignName] = useState<string>('');
+  const [rightSignNip, setRightSignNip] = useState<string>('');
 
   // Report Data
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRow[]>([]);
@@ -254,6 +264,11 @@ function RecapContent() {
       if (data.metadata) {
         if (data.metadata.classList) setClassList(data.metadata.classList);
         if (data.metadata.teacherList) setTeacherList(data.metadata.teacherList);
+        if (data.metadata.userList) {
+          setUserList(data.metadata.userList);
+        } else if (data.metadata.teacherList) {
+          setUserList(data.metadata.teacherList);
+        }
         if (data.metadata.subjectList) setSubjectList(data.metadata.subjectList);
       }
 
@@ -717,6 +732,191 @@ function RecapContent() {
               </div>
             </div>
           </div>
+
+          {/* Signature Configuration Controls Card (Nama, NIP & Jabatan Tanda Tangan) */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '16px 18px',
+              marginBottom: '20px',
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>✍️</span>
+                <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Pengaturan Lembar Pengesahan &amp; Tanda Tangan (Nama, NIP &amp; Jabatan)
+                </span>
+              </div>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                Bisa disesuaikan &amp; akan tercetak pada bagian paling bawah halaman laporan
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+              {/* Left Side: Mengetahui (mis. Kepala Sekolah) */}
+              <div style={{ background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', marginBottom: '10px' }}>
+                  ⬅️ Tanda Tangan Kiri: Mengetahui / Pimpinan
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      Jabatan / Gelar Pengesah
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={leftSignRole}
+                      onChange={(e) => setLeftSignRole(e.target.value)}
+                      placeholder="mis: Kepala Sekolah SNT 10 Kupang"
+                    />
+                  </div>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      Pilih Nama dari Users Sheet
+                    </label>
+                    <select
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={leftSignName}
+                      onChange={(e) => setLeftSignName(e.target.value)}
+                    >
+                      <option value="">-- Pilih dari Daftar Users --</option>
+                      {userList.map((u) => (
+                        <option key={u} value={u}>
+                          👤 {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      Or Ketik Custom Nama &amp; Gelar
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={leftSignName}
+                      onChange={(e) => setLeftSignName(e.target.value)}
+                      placeholder="mis: Drs. Yohanes Suban, M.Pd"
+                    />
+                  </div>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      NIP / NIK (Opsional)
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={leftSignNip}
+                      onChange={(e) => setLeftSignNip(e.target.value)}
+                      placeholder="mis: 19780512 200501 1 004 atau -"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side: Penanggung Jawab Laporan (mis. Wakasek / Wali Kelas / Koordinator) */}
+              <div style={{ background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', marginBottom: '10px' }}>
+                  ➡️ Tanda Tangan Kanan: Penanggung Jawab Laporan
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                      <label className="input-label" style={{ fontSize: '11px', margin: 0 }}>
+                        Jabatan / Role Laporan (Bisa Diubah)
+                      </label>
+                    </div>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px', marginBottom: '6px' }}
+                      value={rightSignRole}
+                      onChange={(e) => setRightSignRole(e.target.value)}
+                      placeholder="mis: Wakil Kepala Kesiswaan / Wali Kelas 7-A"
+                    />
+                    {/* Preset Buttons */}
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setRightSignRole('Wakil Kepala Kesiswaan')}
+                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                      >
+                        + Wakasek Kesiswaan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRightSignRole(selectedClass !== 'ALL' ? `Wali Kelas ${selectedClass}` : 'Wali Kelas')}
+                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                      >
+                        + Wali Kelas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRightSignRole('Koordinator Presensi / Kesiswaan')}
+                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                      >
+                        + Koordinator Presensi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRightSignRole('Guru Mata Pelajaran')}
+                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                      >
+                        + Guru Mapel
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      Pilih Nama dari Users Sheet
+                    </label>
+                    <select
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={rightSignName}
+                      onChange={(e) => setRightSignName(e.target.value)}
+                    >
+                      <option value="">-- Pilih dari Daftar Users --</option>
+                      {userList.map((u) => (
+                        <option key={u} value={u}>
+                          👤 {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      Or Ketik Custom Nama &amp; Gelar
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={rightSignName}
+                      onChange={(e) => setRightSignName(e.target.value)}
+                      placeholder="mis: Maria B. S.Pd"
+                    />
+                  </div>
+                  <div>
+                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                      NIP / NIK (Opsional)
+                    </label>
+                    <input
+                      className="input-field"
+                      style={{ padding: '6px 10px', fontSize: '12px' }}
+                      value={rightSignNip}
+                      onChange={(e) => setRightSignNip(e.target.value)}
+                      placeholder="mis: 19820311 200802 2 001 atau -"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* =========================================================================
@@ -1017,28 +1217,32 @@ function RecapContent() {
           <div className="signature-section">
             <div className="signature-box">
               <div>Mengetahui,</div>
-              <div style={{ fontWeight: 700 }}>Kepala Sekolah SNT 10 Kupang</div>
+              <div style={{ fontWeight: 700 }}>{leftSignRole || 'Kepala Sekolah SNT 10 Kupang'}</div>
               <div className="signature-space" />
               <div style={{ fontWeight: 700, textDecoration: 'underline' }}>
-                ( .................................................... )
+                {leftSignName.trim() ? `( ${leftSignName.trim()} )` : '( .................................................... )'}
               </div>
-              <div style={{ fontSize: '11px', color: '#333333' }}>NIP. .........................................</div>
+              <div style={{ fontSize: '11px', color: '#333333' }}>
+                NIP. {leftSignNip.trim() ? leftSignNip.trim() : '.........................................'}
+              </div>
             </div>
 
             <div className="signature-box">
               <div>Kupang, {currentDateFormatted}</div>
               <div style={{ fontWeight: 700 }}>
-                {activeTab === 'attendance' && (selectedClass === 'ALL' ? 'Koordinator Presensi / Kesiswaan' : `Wali Kelas ${selectedClass}`)}
-                {activeTab === 'journal-teacher' && 'Guru Mata Pelajaran Bersangkutan'}
-                {activeTab === 'journal-all' && 'Koordinator Kurikulum / Tim Akademik'}
+                {rightSignRole || (activeTab === 'attendance' ? 'Wakil Kepala Kesiswaan' : 'Guru / Penanggung Jawab')}
               </div>
               <div className="signature-space" />
               <div style={{ fontWeight: 700, textDecoration: 'underline' }}>
-                {activeTab === 'journal-teacher' && selectedTeacher !== 'ALL'
+                {rightSignName.trim()
+                  ? `( ${rightSignName.trim()} )`
+                  : activeTab === 'journal-teacher' && selectedTeacher !== 'ALL'
                   ? `( ${selectedTeacher} )`
                   : '( .................................................... )'}
               </div>
-              <div style={{ fontSize: '11px', color: '#333333' }}>NIP. .........................................</div>
+              <div style={{ fontSize: '11px', color: '#333333' }}>
+                NIP. {rightSignNip.trim() ? rightSignNip.trim() : '.........................................'}
+              </div>
             </div>
           </div>
         </div>
