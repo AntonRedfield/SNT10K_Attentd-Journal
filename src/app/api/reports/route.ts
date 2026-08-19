@@ -79,7 +79,18 @@ export async function GET(request: NextRequest) {
 
       // Aggregate statistics per student
       const aggregatedStudents = targetStudents.map((st, index) => {
-        const studentRecords = filteredRecords.filter((r) => r.student_id === st.student_id);
+        const targetId = (st.student_id || '').toString().trim().toLowerCase();
+        const targetName = (st.full_name || '').toString().trim().toLowerCase();
+
+        const studentRecords = filteredRecords.filter((r) => {
+          const recId = (r.student_id || '').toString().trim().toLowerCase();
+          if (recId && targetId && recId === targetId) return true;
+
+          const recName = (r.full_name || '').toString().trim().toLowerCase();
+          if (recName && targetName && recName === targetName) return true;
+
+          return false;
+        });
 
         let hadir = 0;
         let sakit = 0;
@@ -87,10 +98,11 @@ export async function GET(request: NextRequest) {
         let alpa = 0;
 
         studentRecords.forEach((rec) => {
-          const st = normalizeStatus(rec.attendance_status);
-          if (st === 'Sakit') sakit++;
-          else if (st === 'Izin') izin++;
-          else if (st === 'Alpa') alpa++;
+          const statusVal = rec.attendance_status || (rec as any).status;
+          const statusNorm = normalizeStatus(statusVal);
+          if (statusNorm === 'Sakit') sakit++;
+          else if (statusNorm === 'Izin') izin++;
+          else if (statusNorm === 'Alpa') alpa++;
           else hadir++;
         });
 

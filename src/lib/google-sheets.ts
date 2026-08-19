@@ -192,8 +192,26 @@ export async function getSheetRows<T = Record<string, string>>(
     return rows.slice(1).map((row) => {
       const obj: Record<string, string> = {};
       headers.forEach((header, i) => {
-        obj[header] = row[i] || '';
+        const rawHeader = header || '';
+        obj[rawHeader] = row[i] || '';
+        const normKey = rawHeader.trim().toLowerCase().replace(/\s+/g, '_');
+        if (normKey && !obj[normKey]) {
+          obj[normKey] = row[i] || '';
+        }
       });
+
+      // Fallback for Attendance sheet if headers vary
+      if (sheetName === 'Attendance') {
+        obj.timestamp = obj.timestamp || row[0] || '';
+        obj.date = obj.date || row[1] || '';
+        obj.class_name = obj.class_name || row[2] || '';
+        obj.student_id = obj.student_id || row[3] || '';
+        obj.full_name = obj.full_name || row[4] || '';
+        obj.attendance_status = obj.attendance_status || obj.status || row[5] || '';
+        obj.note = obj.note || row[6] || '';
+        obj.recorded_by_username = obj.recorded_by_username || row[7] || '';
+      }
+
       // Fallback for Journals if photo_url was appended before header update
       if (sheetName === 'Journals' && !obj.photo_url && row[7]) {
         obj.photo_url = row[7];
