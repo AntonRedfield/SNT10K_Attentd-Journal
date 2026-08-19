@@ -1010,12 +1010,11 @@ function RecapContent() {
                       <th style={{ width: '38px', textAlign: 'center' }}>No</th>
                       <th style={{ textAlign: 'left' }}>Nama Siswa</th>
                       <th style={{ width: '75px', textAlign: 'center' }}>Kelas</th>
-                      <th style={{ width: '80px', textAlign: 'center' }}>ID Siswa</th>
                       <th style={{ width: '65px', textAlign: 'center' }}>Sakit (S)</th>
                       <th style={{ width: '65px', textAlign: 'center' }}>Izin (I)</th>
                       <th style={{ width: '65px', textAlign: 'center' }}>Absen (A)</th>
                       <th style={{ width: '75px', textAlign: 'center' }}>Hadir (H)</th>
-                      <th style={{ width: '80px', textAlign: 'center' }}>% Hadir</th>
+                      <th style={{ width: '85px', textAlign: 'center' }}>Persentase</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1025,9 +1024,6 @@ function RecapContent() {
                         <td style={{ fontWeight: 600, color: '#000000' }}>{row.full_name}</td>
                         <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e3863' }}>
                           {row.class_name}
-                        </td>
-                        <td style={{ textAlign: 'center', fontSize: '11px', color: '#555555' }}>
-                          {row.student_id}
                         </td>
                         <td style={{ textAlign: 'center', fontWeight: row.sakit > 0 ? 700 : 400 }}>{row.sakit}</td>
                         <td style={{ textAlign: 'center', fontWeight: row.izin > 0 ? 700 : 400 }}>{row.izin}</td>
@@ -1040,7 +1036,7 @@ function RecapContent() {
                   {attendanceSummary && (
                     <tfoot>
                       <tr style={{ fontWeight: 700, background: '#fdfdfd' }}>
-                        <td colSpan={4} style={{ textAlign: 'center' }}>
+                        <td colSpan={3} style={{ textAlign: 'center' }}>
                           TOTAL REKAPITULASI KELAS
                         </td>
                         <td style={{ textAlign: 'center' }}>{attendanceSummary.totalSakit}</td>
