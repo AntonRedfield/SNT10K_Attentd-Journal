@@ -1407,9 +1407,11 @@ function RecapContent() {
         }
 
         .signature-section {
-          margin-top: 36px;
+          margin-top: 40px;
           display: flex;
-          justifyContent: space-between;
+          justify-content: space-between;
+          align-items: flex-start;
+          width: 100%;
           font-size: 12px;
           color: #000000;
           page-break-inside: avoid;
@@ -1417,7 +1419,8 @@ function RecapContent() {
 
         .signature-box {
           text-align: center;
-          min-width: 220px;
+          width: 250px;
+          max-width: 45%;
         }
 
         .signature-space {
