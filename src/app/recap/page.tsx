@@ -287,12 +287,16 @@ function RecapContent() {
         if (data.metadata.classList) setClassList(data.metadata.classList);
         if (data.metadata.teacherList) setTeacherList(data.metadata.teacherList);
         if (data.metadata.userList) {
-          const list = data.metadata.userList.map((u: any) =>
-            typeof u === 'string' ? { username: u } : u
-          );
+          const list = data.metadata.userList
+            .map((u: any) => (typeof u === 'string' ? { username: u } : u))
+            .filter((u: any) => u && u.username);
           setUserList(list);
         } else if (data.metadata.teacherList) {
-          setUserList(data.metadata.teacherList.map((t: string) => ({ username: t })));
+          setUserList(
+            data.metadata.teacherList
+              .filter(Boolean)
+              .map((t: string) => ({ username: t }))
+          );
         }
         if (data.metadata.subjectList) setSubjectList(data.metadata.subjectList);
       }
@@ -810,8 +814,8 @@ function RecapContent() {
                       onChange={(e) => handleSelectLeftUser(e.target.value)}
                     >
                       <option value="">-- Pilih dari Daftar Users --</option>
-                      {userList.map((u) => (
-                        <option key={u.username} value={u.username}>
+                      {userList.map((u, idx) => (
+                        <option key={`left-u-${u.username || 'idx'}-${idx}`} value={u.username}>
                           👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
                         </option>
                       ))}
@@ -907,8 +911,8 @@ function RecapContent() {
                       onChange={(e) => handleSelectRightUser(e.target.value)}
                     >
                       <option value="">-- Pilih dari Daftar Users --</option>
-                      {userList.map((u) => (
-                        <option key={u.username} value={u.username}>
+                      {userList.map((u, idx) => (
+                        <option key={`right-u-${u.username || 'idx'}-${idx}`} value={u.username}>
                           👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
                         </option>
                       ))}
