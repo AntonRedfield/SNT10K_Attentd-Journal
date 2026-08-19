@@ -284,21 +284,33 @@ function RecapContent() {
       }
 
       if (data.metadata) {
-        if (data.metadata.classList) setClassList(data.metadata.classList);
-        if (data.metadata.teacherList) setTeacherList(data.metadata.teacherList);
+        if (data.metadata.classList) {
+          setClassList(Array.from(new Set(data.metadata.classList.filter(Boolean))));
+        }
+        if (data.metadata.teacherList) {
+          setTeacherList(Array.from(new Set(data.metadata.teacherList.filter(Boolean))));
+        }
         if (data.metadata.userList) {
           const list = data.metadata.userList
             .map((u: any) => (typeof u === 'string' ? { username: u } : u))
             .filter((u: any) => u && u.username);
-          setUserList(list);
+          const uniqueUsers: UserOption[] = [];
+          const seen = new Set();
+          for (const u of list) {
+            if (!seen.has(u.username)) {
+              seen.add(u.username);
+              uniqueUsers.push(u);
+            }
+          }
+          setUserList(uniqueUsers);
         } else if (data.metadata.teacherList) {
-          setUserList(
-            data.metadata.teacherList
-              .filter(Boolean)
-              .map((t: string) => ({ username: t }))
-          );
+          const uniqueTeachers = Array.from(new Set(data.metadata.teacherList.filter(Boolean)));
+          setUserList(uniqueTeachers.map((t: any) => ({ username: t })));
         }
-        if (data.metadata.subjectList) setSubjectList(data.metadata.subjectList);
+        if (data.metadata.subjectList) {
+          const validSubs = (data.metadata.subjectList || []).filter((s: any) => s && s.name);
+          setSubjectList(validSubs);
+        }
       }
 
       if (typeParam === 'attendance') {
@@ -638,8 +650,8 @@ function RecapContent() {
                   style={{ padding: '7px 10px', fontSize: '12.5px' }}
                 >
                   <option value="ALL">Semua Kelas</option>
-                  {classList.map((cls) => (
-                    <option key={cls} value={cls}>
+                  {classList.map((cls, idx) => (
+                    <option key={`cls-${cls}-${idx}`} value={cls}>
                       Kelas {cls}
                     </option>
                   ))}
@@ -660,8 +672,8 @@ function RecapContent() {
                       style={{ padding: '7px 10px', fontSize: '12.5px' }}
                     >
                       <option value="ALL">Semua Guru</option>
-                      {teacherList.map((t) => (
-                        <option key={t} value={t}>
+                      {teacherList.map((t, idx) => (
+                        <option key={`t-${t}-${idx}`} value={t}>
                           {t}
                         </option>
                       ))}
@@ -679,8 +691,8 @@ function RecapContent() {
                       style={{ padding: '7px 10px', fontSize: '12.5px' }}
                     >
                       <option value="ALL">Semua Mapel</option>
-                      {subjectList.map((s) => (
-                        <option key={s.name} value={s.name}>
+                      {subjectList.map((s, idx) => (
+                        <option key={`sub-${s.name}-${idx}`} value={s.name}>
                           {s.name}
                         </option>
                       ))}
