@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Build 2D array for batch append
     const rows: string[][] = records.map(
-      (r: { student_id: string; full_name: string; attendance_status: string; note?: string }) => [
+      (r: { student_id: string; full_name: string; attendance_status: string; note?: string; attachment_url?: string }) => [
         now,                      // timestamp
         date,                     // date
         class_name,               // class_name
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         r.attendance_status,      // attendance_status
         r.note || '',             // note
         session.username,         // recorded_by_username
+        r.attachment_url || '',   // attachment_url (Drive link / photo proof)
       ]
     );
 

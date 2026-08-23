@@ -216,6 +216,9 @@ export interface User {
   role: UserRole;
   assigned_class: string;
   nip?: string;
+  pin?: string;
+  biometric_credential_id?: string;
+  biometric_public_key?: string;
 }
 
 // Student interface
@@ -236,6 +239,7 @@ export interface AttendanceRecord {
   attendance_status: AttendanceStatus;
   note: string;
   recorded_by_username: string;
+  attachment_url?: string;
 }
 
 // Google Drive folder for journal attachments

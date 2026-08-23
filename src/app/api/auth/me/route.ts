@@ -18,10 +18,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const users = await getSheetRows<User>(SHEET_USERS);
+    const existingUser = users.find((u) => u.user_id === session.user_id);
+
     return NextResponse.json({
       user: {
         ...session,
         role: normalizeRole(session.role),
+        has_pin: !!(existingUser?.pin && existingUser.pin.trim().length >= 4),
+        has_biometric: !!(existingUser?.biometric_credential_id && existingUser.biometric_credential_id.trim().length > 0),
+        biometric_credential_id: existingUser?.biometric_credential_id || '',
       },
     });
   } catch (error) {
@@ -79,13 +85,17 @@ export async function PUT(request: NextRequest) {
     // Determine final password
     const finalPassword = password && password.trim() ? password.trim() : (existingUser.password || '');
 
-    // Update row in Google Sheets (user_id, username, password, role, assigned_class)
+    // Update row in Google Sheets (user_id, username, password, role, assigned_class, nip, pin, biometric_credential_id, biometric_public_key)
     await updateRow(SHEET_USERS, rowIndex, [
       session.user_id,
       trimmedUsername,
       finalPassword,
       existingUser.role || session.role,
       existingUser.assigned_class || session.assigned_class || 'ALL',
+      existingUser.nip || '',
+      existingUser.pin || '',
+      existingUser.biometric_credential_id || '',
+      existingUser.biometric_public_key || '',
     ]);
 
     // Create updated session payload & fresh JWT cookie

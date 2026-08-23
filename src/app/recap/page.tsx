@@ -31,6 +31,17 @@ interface AttendanceRow {
   percentage: string;
 }
 
+interface AbsenceRecordRow {
+  date: string;
+  student_id: string;
+  full_name: string;
+  class_name: string;
+  attendance_status: 'Sakit' | 'Izin' | 'Alpa';
+  note: string;
+  recorded_by_username: string;
+  attachment_url?: string;
+}
+
 interface JournalRow {
   journal_id: string;
   timestamp: string;
@@ -118,6 +129,8 @@ function RecapContent() {
 
   // Report Data
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRow[]>([]);
+  const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecordRow[]>([]);
+  const [showEvidenceDetails, setShowEvidenceDetails] = useState(false);
   const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
   const [journalRecords, setJournalRecords] = useState<JournalRow[]>([]);
 
@@ -316,6 +329,7 @@ function RecapContent() {
       if (typeParam === 'attendance') {
         setAttendanceRecords(data.records || []);
         setAttendanceSummary(data.summary || null);
+        setAbsenceRecords(data.absenceRecords || []);
       } else {
         setJournalRecords(data.records || []);
       }
@@ -1089,6 +1103,120 @@ function RecapContent() {
                     </tfoot>
                   )}
                 </table>
+              )}
+
+              {/* Rincian Ketidakhadiran & Bukti Surat / Dispensasi */}
+              {absenceRecords.length > 0 && (
+                <div style={{ marginTop: '24px', marginBottom: '24px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '12px',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '15px' }}>📋</span>
+                      <h4 style={{ fontSize: '13.5px', fontWeight: 800, color: '#000000', margin: 0 }}>
+                        Daftar Rincian Ketidakhadiran &amp; Bukti Surat (Dokter / Izin Lomba)
+                      </h4>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: '#eef3fa',
+                        color: '#1e3863',
+                      }}
+                    >
+                      {absenceRecords.length} Catatan • {absenceRecords.filter((a) => !!a.attachment_url).length} Berkas Bukti
+                    </span>
+                  </div>
+
+                  <table className="ink-saver-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '35px', textAlign: 'center' }}>No</th>
+                        <th style={{ width: '85px', textAlign: 'center' }}>Tanggal</th>
+                        <th style={{ textAlign: 'left' }}>Nama Siswa</th>
+                        <th style={{ width: '65px', textAlign: 'center' }}>Kelas</th>
+                        <th style={{ width: '65px', textAlign: 'center' }}>Status</th>
+                        <th style={{ textAlign: 'left' }}>Catatan / Keterangan</th>
+                        <th style={{ width: '110px', textAlign: 'center' }}>Lampiran Bukti</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {absenceRecords.map((rec, idx) => (
+                        <tr key={`abs-${rec.student_id}-${rec.date}-${idx}`}>
+                          <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                          <td style={{ textAlign: 'center', fontSize: '11px' }}>{rec.date}</td>
+                          <td style={{ fontWeight: 600, color: '#000000' }}>{rec.full_name}</td>
+                          <td style={{ textAlign: 'center', color: '#1e3863', fontWeight: 600 }}>{rec.class_name}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                background:
+                                  rec.attendance_status === 'Sakit'
+                                    ? '#fef3c7'
+                                    : rec.attendance_status === 'Izin'
+                                    ? '#e0f2fe'
+                                    : '#fee2e2',
+                                color:
+                                  rec.attendance_status === 'Sakit'
+                                    ? '#92400e'
+                                    : rec.attendance_status === 'Izin'
+                                    ? '#0369a1'
+                                    : '#b91c1c',
+                              }}
+                            >
+                              {rec.attendance_status}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '11px', color: '#333333' }}>
+                            {rec.note || '-'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {rec.attachment_url ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLightboxPhoto({
+                                    url: rec.attachment_url || '',
+                                    title: `Bukti ${rec.attendance_status} - ${rec.full_name} (${rec.date})`,
+                                  })
+                                }
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  padding: '3px 8px',
+                                  fontSize: '11px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <span>📷</span>
+                                <span>Lihat Bukti</span>
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '10.5px', color: '#999999' }}>-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}

@@ -141,6 +141,24 @@ export async function GET(request: NextRequest) {
         ? ((totalHadir / totalAllDays) * 100).toFixed(1)
         : '100.0';
 
+      // Extract absence records with notes and attachment evidence
+      const absenceRecords = filteredRecords
+        .filter((r) => {
+          const norm = normalizeStatus(r.attendance_status || (r as any).status);
+          return norm !== 'Hadir';
+        })
+        .map((r) => ({
+          date: r.date || (r.timestamp ? r.timestamp.slice(0, 10) : ''),
+          student_id: r.student_id,
+          full_name: r.full_name,
+          class_name: r.class_name,
+          attendance_status: normalizeStatus(r.attendance_status || (r as any).status),
+          note: r.note || '',
+          recorded_by_username: r.recorded_by_username || '',
+          attachment_url: r.attachment_url || (r as any).photo_url || '',
+        }))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
       return NextResponse.json({
         reportType: 'attendance',
         filter: {
@@ -160,8 +178,11 @@ export async function GET(request: NextRequest) {
           totalIzin,
           totalAlpa,
           classAvgPercentage,
+          totalAbsenceRecords: absenceRecords.length,
+          totalEvidenceAttached: absenceRecords.filter((a) => !!a.attachment_url).length,
         },
         records: aggregatedStudents,
+        absenceRecords,
       });
     }
 

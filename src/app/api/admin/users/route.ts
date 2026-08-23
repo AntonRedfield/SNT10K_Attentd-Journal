@@ -93,6 +93,9 @@ export async function PUT(request: NextRequest) {
       role || existingUser.role,
       assigned_class ? assigned_class.trim() : (existingUser.assigned_class || 'ALL'),
       nip !== undefined ? nip.trim() : (existingUser.nip || ''),
+      existingUser.pin || '',
+      existingUser.biometric_credential_id || '',
+      existingUser.biometric_public_key || '',
     ]);
 
     return NextResponse.json({ success: true });

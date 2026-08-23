@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { SessionPayload, ROLE_LABELS, normalizeRole } from '@/lib/constants';
 import { Spinner } from '@/components/Spinner';
 import { SettingsIcon, LogoutIcon, LockIcon } from '@/components/Icons';
+import { FastLoginSetupModal } from '@/components/FastLoginSetupModal';
+import { FastLoginPromptModal } from '@/components/FastLoginPromptModal';
 
 interface NavbarProps {
   user: SessionPayload;
@@ -14,6 +16,11 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<SessionPayload>(initialUser);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showFastLoginModal, setShowFastLoginModal] = useState(false);
+  const [fastLoginStatus, setFastLoginStatus] = useState<{ has_pin?: boolean; has_biometric?: boolean }>({
+    has_pin: (initialUser as any).has_pin || false,
+    has_biometric: (initialUser as any).has_biometric || false,
+  });
   const [username, setUsername] = useState(initialUser.username);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -21,6 +28,25 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const refreshFastLoginStatus = useCallback(() => {
+    if (!currentUser.user_id) return;
+    fetch(`/api/auth/fast-login?user_id=${encodeURIComponent(currentUser.user_id)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setFastLoginStatus({
+            has_pin: !!data.has_pin,
+            has_biometric: !!data.has_biometric,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [currentUser.user_id]);
+
+  useEffect(() => {
+    refreshFastLoginStatus();
+  }, [refreshFastLoginStatus]);
 
   const handleLogout = async () => {
     try {
@@ -38,6 +64,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
     setShowPasswordFields(false);
     setError('');
     setSuccess('');
+    refreshFastLoginStatus();
     setShowEditModal(true);
   };
 
@@ -437,6 +464,47 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               )}
             </div>
 
+            {/* Fast Login / Keamanan Section */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #f0f7ff 0%, #e0f2fe 100%)',
+                border: '1px solid #bae6fd',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>⚡</span> Masuk Cepat (Fast Login)
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#0c4a6e', marginTop: '2px' }}>
+                  PIN: <strong>{fastLoginStatus.has_pin ? 'Aktif ✅' : 'Belum ⚪'}</strong> &bull; Biometrik: <strong>{fastLoginStatus.has_biometric ? 'Aktif ✅' : 'Belum ⚪'}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setShowFastLoginModal(true);
+                }}
+                className="btn btn-sm btn-primary"
+                style={{
+                  fontSize: '12px',
+                  padding: '6px 12px',
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  borderRadius: '6px',
+                }}
+              >
+                ⚙️ Kelola
+              </button>
+            </div>
+
             {/* Error & Success Banners */}
             {error && (
               <div
@@ -599,6 +667,31 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
           </div>
         </div>
       )}
+
+      {/* Fast Login Setup Modal */}
+      <FastLoginSetupModal
+        isOpen={showFastLoginModal}
+        onClose={() => {
+          setShowFastLoginModal(false);
+          refreshFastLoginStatus();
+        }}
+        user={{
+          ...currentUser,
+          has_pin: fastLoginStatus.has_pin,
+          has_biometric: fastLoginStatus.has_biometric,
+        }}
+        onUpdated={refreshFastLoginStatus}
+      />
+
+      {/* Automatic 1st Login Prompt Banner / Modal */}
+      <FastLoginPromptModal
+        user={{
+          ...currentUser,
+          has_pin: fastLoginStatus.has_pin,
+          has_biometric: fastLoginStatus.has_biometric,
+        }}
+        onOpenSetup={() => setShowFastLoginModal(true)}
+      />
     </>
   );
 }

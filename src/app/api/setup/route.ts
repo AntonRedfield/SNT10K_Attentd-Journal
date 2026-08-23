@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Create Users sheet with headers
     await createSheetTab(SHEET_USERS, [
-      'user_id', 'username', 'password', 'role', 'assigned_class', 'nip',
+      'user_id', 'username', 'password', 'role', 'assigned_class', 'nip', 'pin', 'biometric_credential_id', 'biometric_public_key',
     ]);
     results.push('✅ Users sheet created');
 
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     // 3. Create Attendance sheet with headers
     await createSheetTab(SHEET_ATTENDANCE, [
       'timestamp', 'date', 'class_name', 'student_id', 'full_name',
-      'attendance_status', 'note', 'recorded_by_username',
+      'attendance_status', 'note', 'recorded_by_username', 'attachment_url',
     ]);
     results.push('✅ Attendance sheet created');
 

@@ -7,11 +7,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const identifier = (body.user_id || body.username || '').trim();
-    const password = (body.password || '').trim();
+    const pin = String(body.pin || '').trim();
 
-    if (!identifier || !password) {
+    if (!identifier || !pin) {
       return NextResponse.json(
-        { error: 'ID Pengguna dan kata sandi wajib diisi.' },
+        { error: 'ID Pengguna dan PIN 6-digit wajib diisi.' },
         { status: 400 }
       );
     }
@@ -22,13 +22,26 @@ export async function POST(request: NextRequest) {
     const user = users.find((u) => {
       const uid = String(u.user_id ?? '').trim().toLowerCase();
       const uname = String(u.username ?? '').trim().toLowerCase();
-      const upass = String(u.password ?? '').trim();
-      return (uid === targetId || uname === targetId) && upass === password;
+      return uid === targetId || uname === targetId;
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: 'ID Pengguna atau kata sandi tidak sesuai.' },
+        { error: 'Pengguna tidak ditemukan dalam sistem.' },
+        { status: 404 }
+      );
+    }
+
+    if (!user.pin || user.pin.trim() === '') {
+      return NextResponse.json(
+        { error: 'Fitur PIN belum diaktifkan pada akun ini. Silakan masuk dengan kata sandi terlebih dahulu.' },
+        { status: 400 }
+      );
+    }
+
+    if (user.pin.trim() !== pin) {
+      return NextResponse.json(
+        { error: 'PIN yang dimasukkan tidak cocok. Silakan coba lagi.' },
         { status: 401 }
       );
     }
@@ -42,25 +55,19 @@ export async function POST(request: NextRequest) {
       assigned_class: String(user.assigned_class || 'ALL'),
     };
 
-    const hasPin = !!(user.pin && user.pin.trim().length >= 4);
-    const hasBiometric = !!(user.biometric_credential_id && user.biometric_credential_id.trim().length > 0);
-
     const token = await signToken(payload);
     const response = NextResponse.json({
       success: true,
       user: payload,
-      has_pin: hasPin,
-      has_biometric: hasBiometric,
-      biometric_credential_id: user.biometric_credential_id || '',
     });
 
     response.headers.set('Set-Cookie', createSessionCookie(token));
     return response;
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('Login processing error:', errMsg, error);
+    console.error('Verify PIN login error:', errMsg, error);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan pada server saat memproses login.', details: errMsg },
+      { error: 'Terjadi kesalahan saat memproses login PIN.', details: errMsg },
       { status: 500 }
     );
   }

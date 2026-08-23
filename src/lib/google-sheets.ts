@@ -200,6 +200,19 @@ export async function getSheetRows<T = Record<string, string>>(
         }
       });
 
+      // Fallback for Users sheet to guarantee fields even if header row was short
+      if (sheetName === 'Users') {
+        obj.user_id = obj.user_id || row[0] || '';
+        obj.username = obj.username || row[1] || '';
+        obj.password = obj.password || row[2] || '';
+        obj.role = obj.role || row[3] || '';
+        obj.assigned_class = obj.assigned_class || row[4] || '';
+        obj.nip = obj.nip || row[5] || '';
+        obj.pin = obj.pin || (row[6] !== undefined ? row[6] : '');
+        obj.biometric_credential_id = obj.biometric_credential_id || (row[7] !== undefined ? row[7] : '');
+        obj.biometric_public_key = obj.biometric_public_key || (row[8] !== undefined ? row[8] : '');
+      }
+
       // Fallback for Attendance sheet if headers vary
       if (sheetName === 'Attendance') {
         obj.timestamp = obj.timestamp || row[0] || '';
@@ -210,11 +223,29 @@ export async function getSheetRows<T = Record<string, string>>(
         obj.attendance_status = obj.attendance_status || obj.status || row[5] || '';
         obj.note = obj.note || row[6] || '';
         obj.recorded_by_username = obj.recorded_by_username || row[7] || '';
+        obj.attachment_url = obj.attachment_url || obj.photo_url || obj.evidence_url || (row[8] !== undefined ? row[8] : '');
+      }
+
+      // Fallback for Students sheet
+      if (sheetName === 'Students') {
+        obj.student_id = obj.student_id || row[0] || '';
+        obj.full_name = obj.full_name || row[1] || '';
+        obj.class_name = obj.class_name || row[2] || '';
+        obj.is_active = obj.is_active !== undefined ? obj.is_active : (row[3] || 'TRUE');
       }
 
       // Fallback for Journals if photo_url was appended before header update
-      if (sheetName === 'Journals' && !obj.photo_url && row[7]) {
-        obj.photo_url = row[7];
+      if (sheetName === 'Journals') {
+        obj.journal_id = obj.journal_id || row[0] || '';
+        obj.timestamp = obj.timestamp || row[1] || '';
+        obj.class_name = obj.class_name || row[2] || '';
+        obj.subject_name = obj.subject_name || row[3] || '';
+        obj.week_number = obj.week_number || row[4] || '';
+        obj.topic = obj.topic || row[5] || '';
+        obj.teacher_username = obj.teacher_username || row[6] || '';
+        if (!obj.photo_url && row[7]) {
+          obj.photo_url = row[7];
+        }
       }
       return obj as T;
     });
@@ -254,7 +285,7 @@ export async function appendRow(
 
 /**
  * Find row index (0-based, excluding header) matching a predicate.
- * Returns the 1-based sheet row number (for deletion).
+ * Returns the 1-based sheet row number (for deletion or update).
  */
 export async function findRowIndex(
   sheetName: string,
@@ -272,10 +303,37 @@ export async function findRowIndex(
 
     const headers = rows[0] as string[];
     for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
       const obj: Record<string, string> = {};
       headers.forEach((header, idx) => {
-        obj[header] = rows[i][idx] || '';
+        const rawHeader = header || '';
+        obj[rawHeader] = row[idx] || '';
+        const normKey = rawHeader.trim().toLowerCase().replace(/\s+/g, '_');
+        if (normKey && !obj[normKey]) {
+          obj[normKey] = row[idx] || '';
+        }
       });
+
+      // Positional fallbacks for Users
+      if (sheetName === 'Users') {
+        obj.user_id = obj.user_id || row[0] || '';
+        obj.username = obj.username || row[1] || '';
+        obj.password = obj.password || row[2] || '';
+        obj.role = obj.role || row[3] || '';
+        obj.assigned_class = obj.assigned_class || row[4] || '';
+        obj.nip = obj.nip || row[5] || '';
+        obj.pin = obj.pin || (row[6] !== undefined ? row[6] : '');
+        obj.biometric_credential_id = obj.biometric_credential_id || (row[7] !== undefined ? row[7] : '');
+        obj.biometric_public_key = obj.biometric_public_key || (row[8] !== undefined ? row[8] : '');
+      }
+
+      if (sheetName === 'Students') {
+        obj.student_id = obj.student_id || row[0] || '';
+        obj.full_name = obj.full_name || row[1] || '';
+        obj.class_name = obj.class_name || row[2] || '';
+        obj.is_active = obj.is_active !== undefined ? obj.is_active : (row[3] || 'TRUE');
+      }
+
       if (predicate(obj)) return i + 1; // 1-based for Sheets API
     }
     return -1;

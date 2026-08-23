@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar';
 import { ToastProvider, useToast } from '@/components/Toast';
 import { PageLoader, Spinner } from '@/components/Spinner';
 import { SyncIcon } from '@/components/Icons';
+import EvidenceCaptureModal from '@/components/EvidenceCaptureModal';
 import { SessionPayload, Student, ATTENDANCE_STATUSES, STATUS_CONFIG, normalizeStatus, normalizeRole } from '@/lib/constants';
 
 interface StudentAttendance {
@@ -14,6 +15,9 @@ interface StudentAttendance {
   isAbsent: boolean; // toggle checked = tidak hadir
   status: 'Sakit' | 'Izin' | 'Alpa';
   note: string;
+  attachmentFile?: File | null;
+  attachmentPreview?: string | null;
+  attachmentUrl?: string | null;
 }
 
 function AttendanceContent() {
@@ -26,11 +30,16 @@ function AttendanceContent() {
   const [selectedClass, setSelectedClass] = useState('');
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState<string>('');
   const [date, setDate] = useState(() => {
     const d = new Date();
     return d.toISOString().split('T')[0]; // YYYY-MM-DD
   });
   const [submitted, setSubmitted] = useState(false);
+
+  // Evidence modal & Lightbox state
+  const [activeModalStudent, setActiveModalStudent] = useState<StudentAttendance | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string } | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'HADIR' | 'ABSENT' | 'Sakit' | 'Izin' | 'Alpa'>('ALL');
@@ -90,6 +99,9 @@ function AttendanceContent() {
             isAbsent: false,
             status: 'Sakit',
             note: '',
+            attachmentFile: null,
+            attachmentPreview: null,
+            attachmentUrl: null,
           }))
         );
       }
@@ -177,9 +189,53 @@ function AttendanceContent() {
     );
   };
 
+  const updateEvidence = (
+    studentId: string,
+    data: { file: File | null; previewUrl: string | null; note: string }
+  ) => {
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.student_id !== studentId) return s;
+        return {
+          ...s,
+          attachmentFile: data.file,
+          attachmentPreview: data.previewUrl,
+          attachmentUrl: data.file ? null : data.previewUrl,
+          note: data.note,
+        };
+      })
+    );
+    showToast('Lampiran bukti berhasil diperbarui', 'info');
+  };
+
+  const removeEvidence = (studentId: string) => {
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.student_id !== studentId) return s;
+        if (s.attachmentPreview && s.attachmentPreview.startsWith('blob:')) {
+          URL.revokeObjectURL(s.attachmentPreview);
+        }
+        return {
+          ...s,
+          attachmentFile: null,
+          attachmentPreview: null,
+          attachmentUrl: null,
+        };
+      })
+    );
+    showToast('Foto bukti dihapus', 'info');
+  };
+
   const markAllPresent = () => {
     setStudents((prev) =>
-      prev.map((s) => ({ ...s, isAbsent: false, note: '' }))
+      prev.map((s) => ({
+        ...s,
+        isAbsent: false,
+        note: '',
+        attachmentFile: null,
+        attachmentPreview: null,
+        attachmentUrl: null,
+      }))
     );
     showToast('Seluruh siswa ditandai Hadir', 'info');
   };
@@ -188,14 +244,64 @@ function AttendanceContent() {
     if (!user || students.length === 0) return;
 
     setSubmitting(true);
+    setSubmitProgress('Memeriksa berkas lampiran bukti...');
 
     try {
-      const records = students.map((s) => ({
-        student_id: s.student_id,
-        full_name: s.full_name,
-        attendance_status: s.isAbsent ? s.status : 'Hadir',
-        note: s.isAbsent ? s.note : '',
-      }));
+      // 1. Upload any pending attachment files to Google Drive
+      const studentsToUpload = students.filter((s) => s.isAbsent && s.attachmentFile);
+      const studentUrlMap = new Map<string, string>();
+
+      if (studentsToUpload.length > 0) {
+        for (let i = 0; i < studentsToUpload.length; i++) {
+          const s = studentsToUpload[i];
+          setSubmitProgress(
+            `Mengunggah bukti foto (${i + 1}/${studentsToUpload.length}): ${s.full_name}...`
+          );
+
+          const formData = new FormData();
+          formData.append('photo', s.attachmentFile as File);
+          formData.append('student_id', s.student_id);
+          formData.append('student_name', s.full_name);
+          formData.append('class_name', selectedClass);
+          formData.append('date', date);
+          formData.append('status', s.status);
+
+          try {
+            const uploadRes = await fetch('/api/attendance/upload', {
+              method: 'POST',
+              body: formData,
+            });
+            const uploadData = await uploadRes.json();
+            if (uploadData.photo_url) {
+              studentUrlMap.set(s.student_id, uploadData.photo_url);
+            }
+          } catch (uploadErr) {
+            console.error('Failed to upload evidence for student:', s.student_id, uploadErr);
+          }
+        }
+      }
+
+      setSubmitProgress('Menyimpan rekaman presensi ke lembar kerja...');
+
+      // 2. Build attendance records array
+      const records = students.map((s) => {
+        let finalAttachmentUrl = '';
+        if (s.isAbsent) {
+          if (studentUrlMap.has(s.student_id)) {
+            finalAttachmentUrl = studentUrlMap.get(s.student_id) || '';
+          } else if (s.attachmentUrl) {
+            finalAttachmentUrl = s.attachmentUrl;
+          }
+        }
+
+        return {
+          student_id: s.student_id,
+          full_name: s.full_name,
+          attendance_status: s.isAbsent ? s.status : 'Hadir',
+          note: s.isAbsent ? s.note : '',
+          attachment_url: finalAttachmentUrl,
+        };
+      });
 
       const res = await fetch('/api/attendance', {
         method: 'POST',
@@ -219,6 +325,7 @@ function AttendanceContent() {
       showToast('Terjadi kesalahan jaringan saat menyimpan presensi', 'error');
     } finally {
       setSubmitting(false);
+      setSubmitProgress('');
     }
   };
 
@@ -639,43 +746,190 @@ function AttendanceContent() {
                           marginTop: '14px',
                           paddingLeft: 'clamp(0px, 4vw, 50px)',
                           display: 'flex',
+                          flexDirection: 'column',
                           gap: '12px',
-                          flexWrap: 'wrap',
                           animation: 'pageEnter 200ms ease-out',
                         }}
                       >
-                        <div style={{ width: 'clamp(140px, 100%, 160px)', flexShrink: 0 }}>
-                          <label className="input-label" style={{ fontSize: '11.5px' }}>
-                            Alasan Ketidakhadiran
-                          </label>
-                          <select
-                            className="input-field"
-                            value={student.status}
-                            onChange={(e) =>
-                              updateStatus(student.student_id, e.target.value as 'Sakit' | 'Izin' | 'Alpa')
-                            }
-                            style={{ padding: '8px 12px', fontSize: '13px' }}
-                          >
-                            {ATTENDANCE_STATUSES.map((st) => (
-                              <option key={st} value={st}>
-                                {st}
-                              </option>
-                            ))}
-                          </select>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '12px',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          {/* Reason status dropdown */}
+                          <div style={{ width: 'clamp(140px, 100%, 160px)', flexShrink: 0 }}>
+                            <label className="input-label" style={{ fontSize: '11.5px' }}>
+                              Alasan Ketidakhadiran
+                            </label>
+                            <select
+                              className="input-field"
+                              value={student.status}
+                              onChange={(e) =>
+                                updateStatus(student.student_id, e.target.value as 'Sakit' | 'Izin' | 'Alpa')
+                              }
+                              style={{ padding: '8px 12px', fontSize: '13px' }}
+                            >
+                              {ATTENDANCE_STATUSES.map((st) => (
+                                <option key={st} value={st}>
+                                  {st}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Reason note */}
+                          <div style={{ flex: 1, minWidth: '180px' }}>
+                            <label className="input-label" style={{ fontSize: '11.5px' }}>
+                              Catatan / Keterangan Tambahan
+                            </label>
+                            <input
+                              type="text"
+                              className="input-field"
+                              placeholder={
+                                student.status === 'Sakit'
+                                  ? 'Contoh: Surat dokter RS / demam tinggi...'
+                                  : student.status === 'Izin'
+                                  ? 'Contoh: Kejuaraan O2SN / izin keluarga...'
+                                  : 'Contoh: Tanpa konfirmasi orang tua...'
+                              }
+                              value={student.note}
+                              onChange={(e) => updateNote(student.student_id, e.target.value)}
+                              style={{ padding: '8px 12px', fontSize: '13px' }}
+                            />
+                          </div>
                         </div>
 
-                        <div style={{ flex: 1, minWidth: '180px' }}>
-                          <label className="input-label" style={{ fontSize: '11.5px' }}>
-                            Catatan / Keterangan Tambahan
-                          </label>
-                          <input
-                            type="text"
-                            className="input-field"
-                            placeholder="Contoh: Surat dokter / urusan keluarga..."
-                            value={student.note}
-                            onChange={(e) => updateNote(student.student_id, e.target.value)}
-                            style={{ padding: '8px 12px', fontSize: '13px' }}
-                          />
+                        {/* Evidence attachment controls & preview */}
+                        <div
+                          style={{
+                            padding: '10px 14px',
+                            background: '#f8fafc',
+                            borderRadius: '8px',
+                            border: '1px dashed #cbd5e1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '10px',
+                          }}
+                        >
+                          {student.attachmentPreview || student.attachmentUrl ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                              {/* Thumbnail preview */}
+                              <div
+                                onClick={() =>
+                                  setLightboxPhoto({
+                                    url: student.attachmentPreview || student.attachmentUrl || '',
+                                    title: `Bukti ${student.status}: ${student.full_name}`,
+                                  })
+                                }
+                                style={{
+                                  width: '44px',
+                                  height: '44px',
+                                  borderRadius: '6px',
+                                  overflow: 'hidden',
+                                  border: '1px solid #94a3b8',
+                                  cursor: 'pointer',
+                                  background: '#0f172a',
+                                  flexShrink: 0,
+                                }}
+                                title="Klik untuk memperbesar foto bukti"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={student.attachmentPreview || student.attachmentUrl || ''}
+                                  alt="Bukti"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              </div>
+
+                              <div>
+                                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span>📷</span>
+                                  <span>Foto Bukti Terlampir</span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  {student.status === 'Sakit'
+                                    ? 'Surat Sakit / Resep Dokter'
+                                    : student.status === 'Izin'
+                                    ? 'Surat Izin / Dokumen Lomba'
+                                    : 'Dokumen Keterangan'}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '15px' }}>📎</span>
+                              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                Belum ada foto bukti (surat dokter / dispensasi lomba / surat izin).
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Action buttons */}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {student.attachmentPreview || student.attachmentUrl ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLightboxPhoto({
+                                      url: student.attachmentPreview || student.attachmentUrl || '',
+                                      title: `Bukti ${student.status}: ${student.full_name}`,
+                                    })
+                                  }
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                                >
+                                  👁️ Lihat
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveModalStudent(student)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                                >
+                                  ✏️ Ubah / Jepret Kamera
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeEvidence(student.student_id)}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{
+                                    padding: '5px 10px',
+                                    fontSize: '11.5px',
+                                    color: '#c9252d',
+                                    borderColor: '#fca5a5',
+                                  }}
+                                  title="Hapus foto bukti ini"
+                                >
+                                  🗑️ Hapus
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setActiveModalStudent(student)}
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: '#ffffff',
+                                  borderColor: '#1e3863',
+                                  color: '#1e3863',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <span>📸</span>
+                                <span>Ambil Foto Kamera / Lampirkan Bukti</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -688,21 +942,27 @@ function AttendanceContent() {
 
         {/* Submit Button */}
         {students.length > 0 && !submitted && (
-          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             <button
               onClick={handleSubmit}
               className="btn btn-primary btn-lg"
               disabled={submitting}
-              style={{ width: 'min(100%, 380px)', boxShadow: '0 4px 14px rgba(30, 56, 99, 0.25)' }}
+              style={{ width: 'min(100%, 420px)', boxShadow: '0 4px 14px rgba(30, 56, 99, 0.25)' }}
             >
               {submitting ? (
                 <>
-                  <Spinner /> Menyimpan Data Presensi...
+                  <Spinner /> {submitProgress || 'Menyimpan Data Presensi...'}
                 </>
               ) : (
                 `Simpan Presensi (${totalCount} Siswa)`
               )}
             </button>
+
+            {submitting && submitProgress && (
+              <span style={{ fontSize: '12px', color: '#1e3863', fontWeight: 600 }}>
+                {submitProgress}
+              </span>
+            )}
           </div>
         )}
 
@@ -751,6 +1011,108 @@ function AttendanceContent() {
             >
               Input Presensi Tanggal / Kelas Lain
             </button>
+          </div>
+        )}
+
+        {/* Evidence Capture Modal */}
+        {activeModalStudent && (
+          <EvidenceCaptureModal
+            isOpen={!!activeModalStudent}
+            onClose={() => setActiveModalStudent(null)}
+            studentName={activeModalStudent.full_name}
+            studentId={activeModalStudent.student_id}
+            status={activeModalStudent.status}
+            currentNote={activeModalStudent.note}
+            existingFile={activeModalStudent.attachmentFile}
+            existingPhotoUrl={activeModalStudent.attachmentPreview || activeModalStudent.attachmentUrl || undefined}
+            onSave={(data) => {
+              updateEvidence(activeModalStudent.student_id, data);
+              setActiveModalStudent(null);
+            }}
+          />
+        )}
+
+        {/* Lightbox Modal for Full Image View */}
+        {lightboxPhoto && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.88)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 10000,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '20px',
+              animation: 'fadeIn 150ms ease-out',
+            }}
+            onClick={() => setLightboxPhoto(null)}
+          >
+            <div
+              style={{
+                position: 'relative',
+                maxWidth: '90vw',
+                maxHeight: '85vh',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: '#ffffff',
+                  marginBottom: '10px',
+                }}
+              >
+                <div style={{ fontSize: '14px', fontWeight: 700 }}>
+                  {lightboxPhoto.title}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    color: '#ffffff',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title="Tutup (ESC)"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightboxPhoto.url}
+                alt="Bukti Foto"
+                style={{
+                  maxWidth: '90vw',
+                  maxHeight: '80vh',
+                  objectFit: 'contain',
+                  borderRadius: '10px',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                  background: '#0f172a',
+                }}
+              />
+            </div>
           </div>
         )}
       </main>
