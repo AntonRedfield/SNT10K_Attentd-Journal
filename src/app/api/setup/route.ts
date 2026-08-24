@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { DEFAULT_SUBJECTS } from '@/lib/constants';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/setup
  * Verifies Supabase tables, storage buckets, and seeds default records if missing.

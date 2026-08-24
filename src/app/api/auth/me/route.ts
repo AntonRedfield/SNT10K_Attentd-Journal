@@ -3,6 +3,8 @@ import { getSession, signToken, createSessionCookie } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { User, SessionPayload, normalizeRole } from '@/lib/constants';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/me
  * Returns the currently authenticated user's session payload and fast-login capabilities.

@@ -4,6 +4,8 @@ import { getSession, signToken, createSessionCookie } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SessionPayload, normalizeRole } from '@/lib/constants';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/fast-login/biometric
  * Generates a challenge for WebAuthn authentication/registration.

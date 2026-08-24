@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { User, normalizeRole } from '@/lib/constants';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/fast-login?user_id=...
  * Check if a user has PIN and/or Biometrics set up.
