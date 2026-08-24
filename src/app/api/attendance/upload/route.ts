@@ -33,14 +33,24 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await photoFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Sanitize file name
-    const cleanStudent = studentName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Siswa';
-    const cleanClass = className.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_') || 'Kelas';
-    const cleanStatus = status.trim().replace(/[^a-zA-Z0-9]/g, '_') || 'Bukti';
-    const cleanDate = date.trim().replace(/[^a-zA-Z0-9-]/g, '') || 'date';
-    const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
+    // Format date as DD-MM-YYYY
+    let dateFormatted = '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+      const [yyyy, mm, dd] = date.trim().split('-');
+      dateFormatted = `${dd}-${mm}-${yyyy}`;
+    } else {
+      const d = new Date();
+      dateFormatted = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    }
 
-    const fileName = `${cleanDate}/${cleanClass}_${cleanStudent}_${cleanStatus}_${Date.now().toString().slice(-4)}.${ext}`;
+    const cleanStudent = studentName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'siswa';
+    const cleanClass = className.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'kelas';
+    const cleanStatus = status.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'bukti';
+    const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
+    const suffix = Date.now().toString().slice(-4);
+
+    // Format: activity_date_user_suffix.ext (e.g. bukti-presensi-7a-sakit_24-08-2026_student-name_1.jpg)
+    const fileName = `student-evidence/bukti-presensi-${cleanClass}-${cleanStatus}_${dateFormatted}_${cleanStudent}_${suffix}.${ext}`;
     const contentType = photoFile.type || 'image/jpeg';
 
     // Upload to Supabase Storage

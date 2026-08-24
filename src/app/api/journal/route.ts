@@ -77,10 +77,16 @@ export async function POST(request: NextRequest) {
         try {
           const arrayBuffer = await photoFile.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
-          const sanitizedSubject = subjectName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Subject';
-          const sanitizedUser = session.username.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'User';
+
+          const d = new Date();
+          const dateFormatted = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+          const sanitizedSubject = subjectName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'mapel';
+          const sanitizedUser = session.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'guru';
           const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
-          const fileName = `journals/${sanitizedSubject}_week${weekNumber}_${sanitizedUser}_${Date.now().toString().slice(-4)}.${ext}`;
+          const suffix = Date.now().toString().slice(-4);
+
+          // Format: activity_date_user_suffix.ext (e.g. journal-math_24-08-2026_teacher-name_1.jpg)
+          const fileName = `journals/journal-${sanitizedSubject}_${dateFormatted}_${sanitizedUser}_${suffix}.${ext}`;
 
           const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
             .from(BUCKET_NAME)

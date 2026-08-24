@@ -41,13 +41,24 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await photoFile.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Sanitize file name
-    const cleanTeacher = teacherName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Guru';
-    const cleanType = type.trim().replace(/[^a-zA-Z0-9]/g, '_') || 'Masuk';
-    const cleanDate = date.trim().replace(/[^a-zA-Z0-9-]/g, '') || 'date';
-    const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
+    // Format date as DD-MM-YYYY
+    let dateFormatted = '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+      const [yyyy, mm, dd] = date.trim().split('-');
+      dateFormatted = `${dd}-${mm}-${yyyy}`;
+    } else {
+      const d = new Date();
+      dateFormatted = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    }
 
-    const fileName = `teacher-attendance/${cleanDate}/${session.user_id}_${cleanTeacher}_${cleanType}_${Date.now().toString().slice(-4)}.${ext}`;
+    const cleanTeacher = teacherName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'guru';
+    const cleanType = type.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'masuk';
+    const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
+    const suffix = Date.now().toString().slice(-4);
+
+    // Format: activity_date_user_suffix.ext (e.g. presensi-guru-masuk_24-08-2026_teacher-name_1.jpg)
+    const baseFileName = `presensi-guru-${cleanType}_${dateFormatted}_${cleanTeacher}_${suffix}.${ext}`;
+    const fileName = `teacher-attendance/${baseFileName}`;
     const contentType = photoFile.type || 'image/jpeg';
 
     // Upload to Supabase Storage
