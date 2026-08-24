@@ -21,45 +21,75 @@ export const supabaseAdmin: SupabaseClient = createClient(
 );
 
 /**
- * Safely find a user by username or user_id without PostgREST .or() comma-splitting errors.
+ * Safely and flexibly find a user by username, user_id, NIP, role, or partial name.
  */
 export async function findUserByIdentifier(identifier: string): Promise<Record<string, any> | null> {
   const clean = identifier.trim();
   if (!clean) return null;
 
   try {
-    // 1. Try exact or case-insensitive match on username
-    const { data: byUsername, error: errUser } = await supabaseAdmin
+    const { data: allUsers, error } = await supabaseAdmin
       .from('users')
-      .select('*')
-      .ilike('username', clean)
-      .maybeSingle();
+      .select('*');
 
-    if (!errUser && byUsername) {
-      return byUsername;
+    if (error || !allUsers || allUsers.length === 0) {
+      return null;
     }
 
-    // 2. Try exact or case-insensitive match on user_id
-    const { data: byUserId, error: errId } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .ilike('user_id', clean)
-      .maybeSingle();
+    const lowerClean = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    if (!errId && byUserId) {
-      return byUserId;
+    // 1. Exact match on user_id (case-insensitive)
+    const exactId = allUsers.find((u) => String(u.user_id || '').toLowerCase() === clean.toLowerCase());
+    if (exactId) return exactId;
+
+    // 2. Exact match on username (case-insensitive)
+    const exactUsername = allUsers.find((u) => String(u.username || '').toLowerCase() === clean.toLowerCase());
+    if (exactUsername) return exactUsername;
+
+    // 3. Exact match on NIP
+    const exactNip = allUsers.find((u) => String(u.nip || '').trim() === clean && clean !== '-');
+    if (exactNip) return exactNip;
+
+    // 4. Shortcut for Admin
+    if (lowerClean === 'admin' || lowerClean === 'administrator') {
+      const adminUser = allUsers.find((u) => String(u.role || '').toLowerCase() === 'admin');
+      if (adminUser) return adminUser;
     }
 
-    // 3. Fallback: Substring search on username (handles partial names like "Ivan Rahas")
-    const { data: byPartial, error: errPartial } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .ilike('username', `%${clean}%`)
-      .limit(1);
-
-    if (!errPartial && byPartial && byPartial.length > 0) {
-      return byPartial[0];
+    // 5. Shortcut for Principal (Kepala Sekolah)
+    if (lowerClean === 'kepsek' || lowerClean === 'kepalasekolah' || lowerClean === 'principal') {
+      const kepsekUser = allUsers.find((u) => String(u.role || '').toLowerCase().includes('kepala'));
+      if (kepsekUser) return kepsekUser;
     }
+
+    // 6. Match by password alias (e.g. user enters "guru1", "guru2", "kelapa321")
+    const byPass = allUsers.find((u) => String(u.password || '').toLowerCase() === clean.toLowerCase());
+    if (byPass) return byPass;
+
+    // 7. Token-based word search on username (handles "Ivan Rahas", "Erlando Leoanak", etc.)
+    const cleanTokens = clean.toLowerCase().split(/[\s,.-]+/).filter((t) => t.length >= 2);
+    if (cleanTokens.length > 0) {
+      const tokenMatch = allUsers.find((u) => {
+        const uName = String(u.username || '').toLowerCase();
+        return cleanTokens.every((tok) => uName.includes(tok));
+      });
+      if (tokenMatch) return tokenMatch;
+
+      // Single specific token match (e.g. "Leoanak", "Sulthoni", "Fatkhuriza")
+      const singleTokenMatch = allUsers.find((u) => {
+        const uName = String(u.username || '').toLowerCase();
+        return cleanTokens.some((tok) => tok.length >= 4 && uName.includes(tok));
+      });
+      if (singleTokenMatch) return singleTokenMatch;
+    }
+
+    // 8. Normalized alphanumeric partial match
+    const normalizedMatch = allUsers.find((u) => {
+      const uNorm = String(u.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const idNorm = String(u.user_id || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return (lowerClean.length >= 3 && uNorm.includes(lowerClean)) || idNorm.includes(lowerClean) || (lowerClean.length >= 4 && lowerClean.includes(idNorm));
+    });
+    if (normalizedMatch) return normalizedMatch;
 
     return null;
   } catch (err) {

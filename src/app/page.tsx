@@ -564,13 +564,13 @@ export default function LoginPage() {
             <form onSubmit={handleStandardLogin}>
               <div style={{ marginBottom: '16px' }}>
                 <label className="input-label" htmlFor="user_id">
-                  ID Pengguna (User ID)
+                  ID Pengguna / Nama Akun / NIP
                 </label>
                 <input
                   id="user_id"
                   type="text"
                   className="input-field"
-                  placeholder="Contoh: ADM01 / U-001 / ID Akun..."
+                  placeholder="Contoh: admin / Kelapa Suku / Ivan Rahas / aidi-001 / NIP..."
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
                   required
