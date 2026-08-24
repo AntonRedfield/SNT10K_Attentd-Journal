@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
-  getSheetRows,
-  appendRow,
-  appendRows,
-  createSheetTab,
-  findRowIndex,
-  deleteRow,
-  updateRow,
-} from '@/lib/google-sheets';
-import {
-  SHEET_SUBJECTS,
-  DEFAULT_SUBJECTS,
   SubjectItem,
   SubjectType,
   SUBJECT_TYPES,
@@ -21,7 +11,6 @@ import {
  * GET /api/subjects
  * Retrieves all active subjects / activities grouped or listed.
  * Accessible by all authenticated users (Admin, Teacher, PIC).
- * Auto-creates and seeds the 'Subjects' tab with default subjects if not yet present.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -30,53 +19,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let subjects: SubjectItem[] = [];
-    try {
-      const rows = await getSheetRows<Record<string, string>>(SHEET_SUBJECTS);
-      subjects = rows
-        .filter((r) => r.is_active !== 'FALSE' && r.name)
-        .map((r) => ({
-          subject_id: r.subject_id || `SUBJ-${Math.random()}`,
-          name: r.name,
-          type: (SUBJECT_TYPES.includes(r.type as SubjectType)
-            ? r.type
-            : 'Intrakurikuler') as SubjectType,
-          is_active: r.is_active || 'TRUE',
-        }));
-    } catch {
-      // Sheet might not exist yet; we'll initialize below
-      subjects = [];
+    const { data: rows, error } = await supabaseAdmin
+      .from('subjects')
+      .select('*')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Supabase subjects query error:', error);
+      return NextResponse.json({ error: 'Gagal memuat data mata pelajaran' }, { status: 500 });
     }
 
-    // Auto-seed if empty
-    if (subjects.length === 0) {
-      try {
-        await createSheetTab(SHEET_SUBJECTS, ['subject_id', 'name', 'type', 'is_active']);
-        const seedRows = DEFAULT_SUBJECTS.map((item, idx) => [
-          `SUBJ-INIT-${idx + 1}`,
-          item.name,
-          item.type,
-          'TRUE',
-        ]);
-        await appendRows(SHEET_SUBJECTS, seedRows);
-
-        subjects = DEFAULT_SUBJECTS.map((item, idx) => ({
-          subject_id: `SUBJ-INIT-${idx + 1}`,
-          name: item.name,
-          type: item.type,
-          is_active: 'TRUE',
-        }));
-      } catch (seedErr) {
-        console.error('Failed to auto-seed Subjects tab:', seedErr);
-        // Fallback in-memory defaults
-        subjects = DEFAULT_SUBJECTS.map((item, idx) => ({
-          subject_id: `SUBJ-INIT-${idx + 1}`,
-          name: item.name,
-          type: item.type,
-          is_active: 'TRUE',
-        }));
-      }
-    }
+    const subjects: SubjectItem[] = (rows || []).map((r) => ({
+      subject_id: r.subject_id,
+      name: r.name,
+      type: (SUBJECT_TYPES.includes(r.type as SubjectType)
+        ? r.type
+        : 'Intrakurikuler') as SubjectType,
+      is_active: r.is_active ? 'TRUE' : 'FALSE',
+    }));
 
     return NextResponse.json({ subjects });
   } catch (error) {
@@ -91,7 +52,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/subjects
  * Adds a new subject / activity under a specific type.
- * ONLY accessible by Admin.
+ * Accessible by Admin and Teacher.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -121,19 +82,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ensure sheet tab exists
-    await createSheetTab(SHEET_SUBJECTS, ['subject_id', 'name', 'type', 'is_active']);
-
     // Check for duplicate name in same type
-    const existing = await getSheetRows<Record<string, string>>(SHEET_SUBJECTS);
-    const duplicate = existing.some(
-      (r) =>
-        r.name?.trim().toLowerCase() === trimmedName.toLowerCase() &&
-        r.type === type &&
-        r.is_active !== 'FALSE'
-    );
+    const { data: existing } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id')
+      .ilike('name', trimmedName)
+      .eq('type', type)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (duplicate) {
+    if (existing) {
       return NextResponse.json(
         { error: `Mata pelajaran / kegiatan "${trimmedName}" pada kategori ${type} sudah terdaftar` },
         { status: 400 }
@@ -141,7 +99,19 @@ export async function POST(request: NextRequest) {
     }
 
     const subjectId = `SUBJ-${Date.now()}`;
-    await appendRow(SHEET_SUBJECTS, [subjectId, trimmedName, type, 'TRUE']);
+    const { error: insertErr } = await supabaseAdmin
+      .from('subjects')
+      .insert({
+        subject_id: subjectId,
+        name: trimmedName,
+        type,
+        is_active: true,
+      });
+
+    if (insertErr) {
+      console.error('Supabase insert subject error:', insertErr);
+      return NextResponse.json({ error: 'Gagal menambahkan mata pelajaran ke database' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -164,7 +134,7 @@ export async function POST(request: NextRequest) {
 /**
  * PUT /api/subjects
  * Updates an existing subject / activity (name, type, is_active).
- * ONLY accessible by Admin.
+ * Accessible by Admin and Teacher.
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -194,24 +164,21 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const rowIndex = await findRowIndex(
-      SHEET_SUBJECTS,
-      (row) => row.subject_id === subject_id
-    );
+    const isActiveBool = is_active === undefined || is_active === true || is_active === 'TRUE' || is_active === 'true';
 
-    if (rowIndex === -1) {
-      return NextResponse.json(
-        { error: 'Mata pelajaran / kegiatan tidak ditemukan' },
-        { status: 404 }
-      );
+    const { error: updateErr } = await supabaseAdmin
+      .from('subjects')
+      .update({
+        name: trimmedName,
+        type,
+        is_active: isActiveBool,
+      })
+      .eq('subject_id', subject_id);
+
+    if (updateErr) {
+      console.error('Supabase update subject error:', updateErr);
+      return NextResponse.json({ error: 'Gagal memperbarui data mata pelajaran di database' }, { status: 500 });
     }
-
-    await updateRow(SHEET_SUBJECTS, rowIndex, [
-      subject_id,
-      trimmedName,
-      type,
-      is_active || 'TRUE',
-    ]);
 
     return NextResponse.json({
       success: true,
@@ -219,7 +186,7 @@ export async function PUT(request: NextRequest) {
         subject_id,
         name: trimmedName,
         type,
-        is_active: is_active || 'TRUE',
+        is_active: isActiveBool ? 'TRUE' : 'FALSE',
       },
     });
   } catch (error) {
@@ -234,7 +201,7 @@ export async function PUT(request: NextRequest) {
 /**
  * DELETE /api/subjects?subject_id=...
  * Removes a subject / activity from the list.
- * ONLY accessible by Admin.
+ * Accessible by Admin and Teacher.
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -254,19 +221,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const rowIndex = await findRowIndex(
-      SHEET_SUBJECTS,
-      (row) => row.subject_id === subjectId
-    );
+    const { error: deleteErr } = await supabaseAdmin
+      .from('subjects')
+      .delete()
+      .eq('subject_id', subjectId);
 
-    if (rowIndex === -1) {
-      return NextResponse.json(
-        { error: 'Mata pelajaran tidak ditemukan' },
-        { status: 404 }
-      );
+    if (deleteErr) {
+      console.error('Supabase delete subject error:', deleteErr);
+      return NextResponse.json({ error: 'Gagal menghapus mata pelajaran dari database' }, { status: 500 });
     }
-
-    await deleteRow(SHEET_SUBJECTS, rowIndex);
 
     return NextResponse.json({ success: true });
   } catch (error) {

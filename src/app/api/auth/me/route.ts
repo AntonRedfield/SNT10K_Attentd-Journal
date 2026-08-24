@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, signToken, createSessionCookie } from '@/lib/auth';
-import { getSheetRows, findRowIndex, updateRow } from '@/lib/google-sheets';
-import { SHEET_USERS, User, SessionPayload, normalizeRole } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { User, SessionPayload, normalizeRole } from '@/lib/constants';
 
 /**
  * GET /api/auth/me
- * Returns the currently authenticated user's session payload.
+ * Returns the currently authenticated user's session payload and fast-login capabilities.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,8 +18,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const existingUser = users.find((u) => u.user_id === session.user_id);
+    const { data: existingUser, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('user_id', session.user_id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Supabase user fetch error:', error);
+    }
 
     return NextResponse.json({
       user: {
@@ -60,21 +67,27 @@ export async function PUT(request: NextRequest) {
 
     const trimmedUsername = username.trim();
 
-    // Fetch existing users from sheet
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const existingUser = users.find((u) => u.user_id === session.user_id);
+    // Fetch existing user
+    const { data: existingUser, error: fetchErr } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('user_id', session.user_id)
+      .maybeSingle();
 
-    const rowIndex = await findRowIndex(SHEET_USERS, (row) => row.user_id === session.user_id);
-    if (rowIndex === -1 || !existingUser) {
+    if (fetchErr || !existingUser) {
       return NextResponse.json({ error: 'Data akun pengguna tidak ditemukan dalam sistem.' }, { status: 404 });
     }
 
     // Check duplicate username if username changed
     if (trimmedUsername.toLowerCase() !== existingUser.username?.toLowerCase()) {
-      const isDuplicate = users.some(
-        (u) => u.user_id !== session.user_id && u.username?.toLowerCase() === trimmedUsername.toLowerCase()
-      );
-      if (isDuplicate) {
+      const { data: dupUser } = await supabaseAdmin
+        .from('users')
+        .select('user_id')
+        .ilike('username', trimmedUsername)
+        .neq('user_id', session.user_id)
+        .maybeSingle();
+
+      if (dupUser) {
         return NextResponse.json(
           { error: `Nama pengguna "${trimmedUsername}" sudah digunakan oleh akun lain.` },
           { status: 409 }
@@ -85,18 +98,19 @@ export async function PUT(request: NextRequest) {
     // Determine final password
     const finalPassword = password && password.trim() ? password.trim() : (existingUser.password || '');
 
-    // Update row in Google Sheets (user_id, username, password, role, assigned_class, nip, pin, biometric_credential_id, biometric_public_key)
-    await updateRow(SHEET_USERS, rowIndex, [
-      session.user_id,
-      trimmedUsername,
-      finalPassword,
-      existingUser.role || session.role,
-      existingUser.assigned_class || session.assigned_class || 'ALL',
-      existingUser.nip || '',
-      existingUser.pin || '',
-      existingUser.biometric_credential_id || '',
-      existingUser.biometric_public_key || '',
-    ]);
+    // Update in Supabase
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({
+        username: trimmedUsername,
+        password: finalPassword,
+      })
+      .eq('user_id', session.user_id);
+
+    if (updateErr) {
+      console.error('Supabase update user error:', updateErr);
+      return NextResponse.json({ error: 'Gagal memperbarui profil pengguna di database.' }, { status: 500 });
+    }
 
     // Create updated session payload & fresh JWT cookie
     const updatedPayload: SessionPayload = {
@@ -120,7 +134,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Session PUT /api/auth/me error:', error);
     return NextResponse.json(
-      { error: 'Gagal memperbarui profil pengguna ke lembar kerja.' },
+      { error: 'Gagal memperbarui profil pengguna ke database.' },
       { status: 500 }
     );
   }

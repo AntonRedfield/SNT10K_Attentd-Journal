@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSheetRows } from '@/lib/google-sheets';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { signToken, createSessionCookie } from '@/lib/auth';
-import { SHEET_USERS, User, SessionPayload, normalizeRole } from '@/lib/constants';
+import { User, SessionPayload, normalizeRole } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,14 +16,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const targetId = identifier.toLowerCase();
+    // Query Supabase directly
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .or(`username.ilike.${identifier},user_id.ilike.${identifier}`);
 
-    const user = users.find((u) => {
-      const uid = String(u.user_id ?? '').trim().toLowerCase();
-      const uname = String(u.username ?? '').trim().toLowerCase();
+    if (error) {
+      console.error('Supabase user lookup error:', error);
+      return NextResponse.json(
+        { error: 'Gagal memverifikasi akun pengguna.' },
+        { status: 500 }
+      );
+    }
+
+    const user = (users as User[] | null)?.find((u) => {
       const upass = String(u.password ?? '').trim();
-      return (uid === targetId || uname === targetId) && upass === password;
+      return upass === password;
     });
 
     if (!user) {

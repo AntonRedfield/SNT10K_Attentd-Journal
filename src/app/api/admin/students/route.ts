@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows, appendRow, findRowIndex, deleteRow, updateRow } from '@/lib/google-sheets';
-import { SHEET_STUDENTS, Student } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,16 +10,31 @@ export async function GET(request: NextRequest) {
     }
 
     const className = request.nextUrl.searchParams.get('class_name');
-    const students = await getSheetRows<Student>(SHEET_STUDENTS);
+    let query = supabaseAdmin
+      .from('students')
+      .select('*')
+      .order('full_name', { ascending: true });
 
-    const filtered = className
-      ? students.filter((s) => s.class_name === className)
-      : students;
+    if (className && className !== 'ALL') {
+      query = query.eq('class_name', className);
+    }
 
-    return NextResponse.json({ students: filtered });
+    const { data: students, error } = await query;
+
+    if (error) {
+      console.error('Admin students GET error:', error);
+      return NextResponse.json({ error: 'Gagal memuat data siswa dari database.' }, { status: 500 });
+    }
+
+    const formatted = (students || []).map((s) => ({
+      ...s,
+      is_active: s.is_active ? 'TRUE' : 'FALSE',
+    }));
+
+    return NextResponse.json({ students: formatted });
   } catch (error) {
     console.error('Admin students GET error:', error);
-    return NextResponse.json({ error: 'Gagal memuat data siswa dari lembar kerja.' }, { status: 500 });
+    return NextResponse.json({ error: 'Gagal memuat data siswa dari database.' }, { status: 500 });
   }
 }
 
@@ -38,12 +52,24 @@ export async function POST(request: NextRequest) {
     }
 
     const studentId = `S-${Date.now()}`;
-    await appendRow(SHEET_STUDENTS, [studentId, full_name.trim(), class_name.trim(), 'TRUE']);
+    const { error: insertErr } = await supabaseAdmin
+      .from('students')
+      .insert({
+        student_id: studentId,
+        full_name: full_name.trim(),
+        class_name: class_name.trim(),
+        is_active: true,
+      });
+
+    if (insertErr) {
+      console.error('Supabase student insert error:', insertErr);
+      return NextResponse.json({ error: 'Gagal menambahkan data siswa ke database.' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, student_id: studentId });
   } catch (error) {
     console.error('Admin students POST error:', error);
-    return NextResponse.json({ error: 'Gagal menambahkan data siswa ke lembar kerja.' }, { status: 500 });
+    return NextResponse.json({ error: 'Gagal menambahkan data siswa ke database.' }, { status: 500 });
   }
 }
 
@@ -60,14 +86,21 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Parameter ID siswa, nama lengkap, dan kelas wajib disertakan.' }, { status: 400 });
     }
 
-    const rowIndex = await findRowIndex(SHEET_STUDENTS, (row) => row.student_id === student_id);
-    if (rowIndex === -1) {
-      return NextResponse.json({ error: 'Data siswa tidak ditemukan.' }, { status: 404 });
-    }
+    const isActiveBool = is_active === undefined || is_active === true || is_active === 'TRUE' || is_active === 'true';
 
-    await updateRow(SHEET_STUDENTS, rowIndex, [
-      student_id, full_name.trim(), class_name.trim(), is_active || 'TRUE',
-    ]);
+    const { error: updateErr } = await supabaseAdmin
+      .from('students')
+      .update({
+        full_name: full_name.trim(),
+        class_name: class_name.trim(),
+        is_active: isActiveBool,
+      })
+      .eq('student_id', student_id);
+
+    if (updateErr) {
+      console.error('Supabase student update error:', updateErr);
+      return NextResponse.json({ error: 'Gagal memperbarui data siswa di database.' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -88,12 +121,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Parameter ID siswa wajib disertakan.' }, { status: 400 });
     }
 
-    const rowIndex = await findRowIndex(SHEET_STUDENTS, (row) => row.student_id === studentId);
-    if (rowIndex === -1) {
-      return NextResponse.json({ error: 'Data siswa tidak ditemukan.' }, { status: 404 });
+    const { error: deleteErr } = await supabaseAdmin
+      .from('students')
+      .delete()
+      .eq('student_id', studentId);
+
+    if (deleteErr) {
+      console.error('Supabase student delete error:', deleteErr);
+      return NextResponse.json({ error: 'Gagal menghapus data siswa dari database.' }, { status: 500 });
     }
 
-    await deleteRow(SHEET_STUDENTS, rowIndex);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Admin students DELETE error:', error);

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows, findRowIndex, updateRow } from '@/lib/google-sheets';
-import { SHEET_STUDENTS, Student } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,21 +11,39 @@ export async function GET(request: NextRequest) {
 
     const className = request.nextUrl.searchParams.get('class_name') || session.assigned_class;
 
-    // Non-admin users can only see their assigned class
+    // Non-admin users can only see their assigned class unless assigned to ALL
     if (session.role !== 'Admin' && className !== session.assigned_class && session.assigned_class?.toUpperCase() !== 'ALL') {
       return NextResponse.json({ error: 'Akses ditolak: Anda hanya dapat mengakses data kelas yang ditugaskan.' }, { status: 403 });
     }
 
-    const students = await getSheetRows<Student>(SHEET_STUDENTS);
-    const filtered = students.filter(
-      (s) => s.class_name === className && s.is_active?.toUpperCase() === 'TRUE'
-    );
+    let query = supabaseAdmin
+      .from('students')
+      .select('*')
+      .eq('is_active', true)
+      .order('full_name', { ascending: true });
 
-    return NextResponse.json({ students: filtered });
+    if (className && className.toUpperCase() !== 'ALL') {
+      query = query.eq('class_name', className);
+    }
+
+    const { data: students, error } = await query;
+
+    if (error) {
+      console.error('Supabase students query error:', error);
+      return NextResponse.json({ error: 'Gagal memuat data siswa dari database.' }, { status: 500 });
+    }
+
+    // Return with is_active formatted as "TRUE" for backward compatibility
+    const formatted = (students || []).map((s) => ({
+      ...s,
+      is_active: s.is_active ? 'TRUE' : 'FALSE',
+    }));
+
+    return NextResponse.json({ students: formatted });
   } catch (error) {
     console.error('Students error:', error);
     return NextResponse.json(
-      { error: 'Gagal memuat data siswa kelas dari lembar kerja.' },
+      { error: 'Gagal memuat data siswa kelas dari database.' },
       { status: 500 }
     );
   }
@@ -51,17 +68,21 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const rowIndex = await findRowIndex(SHEET_STUDENTS, (row) => row.student_id === student_id);
-    if (rowIndex === -1) {
-      return NextResponse.json({ error: 'Data siswa tidak ditemukan.' }, { status: 404 });
-    }
+    const isActiveBool = is_active === true || is_active === 'TRUE' || is_active === 'true';
 
-    await updateRow(SHEET_STUDENTS, rowIndex, [
-      student_id,
-      full_name.trim(),
-      class_name.trim(),
-      is_active || 'TRUE',
-    ]);
+    const { error: updateErr } = await supabaseAdmin
+      .from('students')
+      .update({
+        full_name: full_name.trim(),
+        class_name: class_name.trim(),
+        is_active: isActiveBool,
+      })
+      .eq('student_id', student_id);
+
+    if (updateErr) {
+      console.error('Supabase student update error:', updateErr);
+      return NextResponse.json({ error: 'Gagal memperbarui data siswa di database.' }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

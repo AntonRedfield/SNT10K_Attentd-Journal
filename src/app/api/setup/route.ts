@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { createSheetTab, appendRow, getSheetRows } from '@/lib/google-sheets';
-import {
-  SHEET_USERS,
-  SHEET_STUDENTS,
-  SHEET_ATTENDANCE,
-  SHEET_JOURNALS,
-  SHEET_SUBJECTS,
-  SHEET_MAIN_DATA,
-  DEFAULT_SUBJECTS,
-} from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { DEFAULT_SUBJECTS } from '@/lib/constants';
 
 /**
  * POST /api/setup
- * Creates all required sheet tabs (Users, Students, Attendance, Journals, Subjects)
- * and seeds initial data from main_data sheet.
+ * Verifies Supabase tables, storage buckets, and seeds default records if missing.
  * Only accessible by Admin role.
  */
 export async function POST(request: NextRequest) {
@@ -26,132 +17,83 @@ export async function POST(request: NextRequest) {
 
     const results: string[] = [];
 
-    // 1. Create Users sheet with headers
-    await createSheetTab(SHEET_USERS, [
-      'user_id', 'username', 'password', 'role', 'assigned_class', 'nip', 'pin', 'biometric_credential_id', 'biometric_public_key',
-    ]);
-    results.push('✅ Users sheet created');
+    // 1. Verify Users Table & Admin
+    const { data: users, error: userErr } = await supabaseAdmin
+      .from('users')
+      .select('user_id, username')
+      .limit(5);
 
-    // 2. Create Students sheet with headers
-    await createSheetTab(SHEET_STUDENTS, [
-      'student_id', 'full_name', 'class_name', 'is_active',
-    ]);
-    results.push('✅ Students sheet created');
+    if (userErr) {
+      results.push(`❌ Error accessing users table: ${userErr.message}`);
+    } else {
+      results.push(`✅ Users table verified (${users?.length || 0} sample users loaded)`);
+    }
 
-    // 3. Create Attendance sheet with headers
-    await createSheetTab(SHEET_ATTENDANCE, [
-      'timestamp', 'date', 'class_name', 'student_id', 'full_name',
-      'attendance_status', 'note', 'recorded_by_username', 'attachment_url',
-    ]);
-    results.push('✅ Attendance sheet created');
+    // 2. Verify Students Table
+    const { count: studentCount, error: studentErr } = await supabaseAdmin
+      .from('students')
+      .select('*', { count: 'exact', head: true });
 
-    // 4. Create Journals sheet with headers
-    await createSheetTab(SHEET_JOURNALS, [
-      'journal_id', 'timestamp', 'class_name', 'subject_name',
-      'week_number', 'topic', 'teacher_username', 'photo_url',
-    ]);
-    results.push('✅ Journals sheet created');
+    if (studentErr) {
+      results.push(`❌ Error accessing students table: ${studentErr.message}`);
+    } else {
+      results.push(`✅ Students table verified (${studentCount || 0} students)`);
+    }
 
-    // 5. Create Subjects sheet with headers & seed default subjects
-    await createSheetTab(SHEET_SUBJECTS, [
-      'subject_id', 'name', 'type', 'is_active',
-    ]);
-    const existingSubjects = await getSheetRows<Record<string, string>>(SHEET_SUBJECTS);
-    if (existingSubjects.length === 0) {
+    // 3. Verify Subjects Table & Seed if empty
+    const { data: existingSubjects, error: subjErr } = await supabaseAdmin
+      .from('subjects')
+      .select('subject_id');
+
+    if (subjErr) {
+      results.push(`❌ Error accessing subjects table: ${subjErr.message}`);
+    } else if (!existingSubjects || existingSubjects.length === 0) {
       for (let i = 0; i < DEFAULT_SUBJECTS.length; i++) {
-        await appendRow(SHEET_SUBJECTS, [
-          `SUBJ-INIT-${i + 1}`,
-          DEFAULT_SUBJECTS[i].name,
-          DEFAULT_SUBJECTS[i].type,
-          'TRUE',
-        ]);
+        await supabaseAdmin.from('subjects').insert({
+          subject_id: `SUBJ-INIT-${i + 1}`,
+          name: DEFAULT_SUBJECTS[i].name,
+          type: DEFAULT_SUBJECTS[i].type,
+          is_active: true,
+        });
       }
-      results.push(`✅ Subjects sheet created & seeded ${DEFAULT_SUBJECTS.length} subjects`);
+      results.push(`✅ Seeded ${DEFAULT_SUBJECTS.length} default subjects into Supabase`);
     } else {
-      results.push('ℹ️ Subjects sheet already exists');
+      results.push(`✅ Subjects table verified (${existingSubjects.length} subjects found)`);
     }
 
-    // 5. Ensure admin account exists in Users sheet
-    const existingUsers = await getSheetRows<Record<string, string>>(SHEET_USERS);
-    const adminExists = existingUsers.some((u) => u.username === 'sistema@snt10kupang');
+    // 4. Verify Attendance Table
+    const { count: attCount, error: attErr } = await supabaseAdmin
+      .from('attendance')
+      .select('*', { count: 'exact', head: true });
 
-    if (!adminExists) {
-      await appendRow(SHEET_USERS, [
-        'U-ADMIN-001',
-        'sistema@snt10kupang',
-        'sistem@absensnt10K',
-        'Admin',
-        'ALL',
-      ]);
-      results.push('✅ Admin account created');
+    if (attErr) {
+      results.push(`❌ Error accessing attendance table: ${attErr.message}`);
     } else {
-      results.push('ℹ️ Admin account already exists');
+      results.push(`✅ Attendance table verified (${attCount || 0} records)`);
     }
 
-    // 6. Try to import students from main_data sheet
-    try {
-      const mainData = await getSheetRows<Record<string, string>>(SHEET_MAIN_DATA);
-      if (mainData.length > 0) {
-        // Check existing students to avoid duplicates
-        const existingStudents = await getSheetRows<Record<string, string>>(SHEET_STUDENTS);
-        const existingIds = new Set(existingStudents.map((s) => s.student_id));
+    // 5. Verify Journals Table
+    const { count: jrnCount, error: jrnErr } = await supabaseAdmin
+      .from('journals')
+      .select('*', { count: 'exact', head: true });
 
-        let importCount = 0;
-        for (const row of mainData) {
-          // Attempt to map main_data columns to Students columns
-          const studentId = row.student_id || row.id || `S-${Date.now()}-${importCount}`;
-          const fullName = row.full_name || row.name || row.nama || '';
-          const className = row.class_name || row.class || row.kelas || '';
-          const role = row.role || row.jabatan || '';
+    if (jrnErr) {
+      results.push(`❌ Error accessing journals table: ${jrnErr.message}`);
+    } else {
+      results.push(`✅ Journals table verified (${jrnCount || 0} journals)`);
+    }
 
-          if (fullName && className && !existingIds.has(studentId)) {
-            // Only import if it looks like student data (not officer data)
-            if (!role || role.toLowerCase() === 'student' || role.toLowerCase() === 'siswa') {
-              await appendRow(SHEET_STUDENTS, [
-                studentId,
-                fullName,
-                className,
-                'TRUE',
-              ]);
-              importCount++;
-            }
-          }
-        }
-        results.push(`✅ Imported ${importCount} students from main_data`);
-
-        // Also try to create PIC/Teacher accounts from main_data officers
-        let officerCount = 0;
-        for (const row of mainData) {
-          const role = row.role || row.jabatan || '';
-          const name = row.full_name || row.name || row.nama || '';
-          const className = row.class_name || row.class || row.kelas || '';
-
-          if (role && role.toLowerCase() !== 'student' && role.toLowerCase() !== 'siswa' && name) {
-            const username = name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
-            const userExists = existingUsers.some((u) => u.username === username);
-
-            if (!userExists) {
-              const mappedRole = role.toLowerCase().includes('teacher') || role.toLowerCase().includes('guru')
-                ? 'Teacher'
-                : 'PIC';
-
-              await appendRow(SHEET_USERS, [
-                `U-${Date.now()}-${officerCount}`,
-                username,
-                username + '123', // Default password
-                mappedRole,
-                className,
-              ]);
-              officerCount++;
-            }
-          }
-        }
-        if (officerCount > 0) {
-          results.push(`✅ Created ${officerCount} user accounts from main_data officers`);
-        }
+    // 6. Verify Storage Bucket
+    const { data: buckets, error: bErr } = await supabaseAdmin.storage.listBuckets();
+    if (bErr) {
+      results.push(`⚠️ Warning checking storage buckets: ${bErr.message}`);
+    } else {
+      const hasBucket = buckets?.some((b) => b.name === 'attendance-evidence');
+      if (hasBucket) {
+        results.push('✅ Supabase Storage bucket "attendance-evidence" is active');
+      } else {
+        results.push('⚠️ Storage bucket "attendance-evidence" not listed (check Supabase Dashboard)');
       }
-    } catch {
-      results.push('ℹ️ main_data sheet not found or empty — skipped import');
     }
 
     return NextResponse.json({

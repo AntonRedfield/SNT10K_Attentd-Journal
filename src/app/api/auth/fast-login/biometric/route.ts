@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getSession, signToken, createSessionCookie } from '@/lib/auth';
-import { getSheetRows, findRowIndex, updateRow } from '@/lib/google-sheets';
-import { SHEET_USERS, User, SessionPayload, normalizeRole } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { SessionPayload, normalizeRole } from '@/lib/constants';
 
 /**
  * GET /api/auth/fast-login/biometric
@@ -44,25 +44,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Data kredensial biometrik tidak valid.' }, { status: 400 });
       }
 
-      const users = await getSheetRows<User>(SHEET_USERS);
-      const existingUser = users.find((u) => u.user_id === session.user_id);
-      const rowIndex = await findRowIndex(SHEET_USERS, (row) => row.user_id === session.user_id);
+      const { error: updateErr } = await supabaseAdmin
+        .from('users')
+        .update({
+          biometric_credential_id: credentialId,
+          biometric_public_key: rawId,
+        })
+        .eq('user_id', session.user_id);
 
-      if (rowIndex === -1 || !existingUser) {
-        return NextResponse.json({ error: 'Pengguna tidak ditemukan dalam sistem.' }, { status: 404 });
+      if (updateErr) {
+        console.error('Supabase biometric registration error:', updateErr);
+        return NextResponse.json({ error: 'Gagal mendaftarkan biometrik ke database.' }, { status: 500 });
       }
-
-      await updateRow(SHEET_USERS, rowIndex, [
-        existingUser.user_id,
-        existingUser.username,
-        existingUser.password || '',
-        existingUser.role || session.role,
-        existingUser.assigned_class || session.assigned_class || 'ALL',
-        existingUser.nip || '',
-        existingUser.pin || '',
-        credentialId,
-        rawId,
-      ]);
 
       return NextResponse.json({
         success: true,
@@ -84,16 +77,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const targetId = identifier.toLowerCase();
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .or(`user_id.ilike.${identifier},username.ilike.${identifier}`)
+      .maybeSingle();
 
-    const user = users.find((u) => {
-      const uid = String(u.user_id ?? '').trim().toLowerCase();
-      const uname = String(u.username ?? '').trim().toLowerCase();
-      return uid === targetId || uname === targetId;
-    });
-
-    if (!user) {
+    if (error || !user) {
       return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
     }
 
@@ -150,25 +140,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Sesi tidak valid.' }, { status: 401 });
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const existingUser = users.find((u) => u.user_id === session.user_id);
-    const rowIndex = await findRowIndex(SHEET_USERS, (row) => row.user_id === session.user_id);
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({
+        biometric_credential_id: '',
+        biometric_public_key: '',
+      })
+      .eq('user_id', session.user_id);
 
-    if (rowIndex === -1 || !existingUser) {
-      return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
+    if (updateErr) {
+      console.error('Biometric DELETE error:', updateErr);
+      return NextResponse.json({ error: 'Gagal menonaktifkan biometrik.' }, { status: 500 });
     }
-
-    await updateRow(SHEET_USERS, rowIndex, [
-      existingUser.user_id,
-      existingUser.username,
-      existingUser.password || '',
-      existingUser.role || session.role,
-      existingUser.assigned_class || session.assigned_class || 'ALL',
-      existingUser.nip || '',
-      existingUser.pin || '',
-      '',
-      '',
-    ]);
 
     return NextResponse.json({
       success: true,

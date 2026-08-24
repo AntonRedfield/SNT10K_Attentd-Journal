@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows, findRowIndex, updateRow } from '@/lib/google-sheets';
-import { SHEET_USERS, User, normalizeRole } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { User, normalizeRole } from '@/lib/constants';
 
 /**
  * GET /api/auth/fast-login?user_id=...
@@ -18,14 +18,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'ID Pengguna diperlukan.' }, { status: 400 });
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const user = users.find(
-      (u) =>
-        String(u.user_id || '').toLowerCase() === targetUserId.toLowerCase() ||
-        String(u.username || '').toLowerCase() === targetUserId.toLowerCase()
-    );
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .or(`user_id.ilike.${targetUserId},username.ilike.${targetUserId}`)
+      .maybeSingle();
 
-    if (!user) {
+    if (error || !user) {
       return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
     }
 
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/auth/fast-login
- * Set or update 6-digit PIN for the logged-in user.
+ * Set or update PIN for the logged-in user.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -68,25 +67,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const existingUser = users.find((u) => u.user_id === session.user_id);
-    const rowIndex = await findRowIndex(SHEET_USERS, (row) => row.user_id === session.user_id);
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({ pin })
+      .eq('user_id', session.user_id);
 
-    if (rowIndex === -1 || !existingUser) {
-      return NextResponse.json({ error: 'Data pengguna tidak ditemukan.' }, { status: 404 });
+    if (updateErr) {
+      console.error('Fast login PIN POST error:', updateErr);
+      return NextResponse.json({ error: 'Gagal menyimpan PIN masuk cepat.' }, { status: 500 });
     }
-
-    await updateRow(SHEET_USERS, rowIndex, [
-      existingUser.user_id,
-      existingUser.username,
-      existingUser.password || '',
-      existingUser.role || session.role,
-      existingUser.assigned_class || session.assigned_class || 'ALL',
-      existingUser.nip || '',
-      pin,
-      existingUser.biometric_credential_id || '',
-      existingUser.biometric_public_key || '',
-    ]);
 
     return NextResponse.json({
       success: true,
@@ -112,29 +101,24 @@ export async function DELETE(request: NextRequest) {
 
     const type = request.nextUrl.searchParams.get('type') || 'pin'; // 'pin' | 'biometric' | 'all'
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const existingUser = users.find((u) => u.user_id === session.user_id);
-    const rowIndex = await findRowIndex(SHEET_USERS, (row) => row.user_id === session.user_id);
-
-    if (rowIndex === -1 || !existingUser) {
-      return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
+    const updates: Record<string, string> = {};
+    if (type === 'pin' || type === 'all') {
+      updates.pin = '';
+    }
+    if (type === 'biometric' || type === 'all') {
+      updates.biometric_credential_id = '';
+      updates.biometric_public_key = '';
     }
 
-    const newPin = type === 'pin' || type === 'all' ? '' : (existingUser.pin || '');
-    const newBioId = type === 'biometric' || type === 'all' ? '' : (existingUser.biometric_credential_id || '');
-    const newBioKey = type === 'biometric' || type === 'all' ? '' : (existingUser.biometric_public_key || '');
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update(updates)
+      .eq('user_id', session.user_id);
 
-    await updateRow(SHEET_USERS, rowIndex, [
-      existingUser.user_id,
-      existingUser.username,
-      existingUser.password || '',
-      existingUser.role || session.role,
-      existingUser.assigned_class || session.assigned_class || 'ALL',
-      existingUser.nip || '',
-      newPin,
-      newBioId,
-      newBioKey,
-    ]);
+    if (updateErr) {
+      console.error('Fast login DELETE error:', updateErr);
+      return NextResponse.json({ error: 'Gagal menonaktifkan fitur masuk cepat.' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

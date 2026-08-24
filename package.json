@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "googleapis": "^175.0.0",
     "jose": "^6.2.9",
     "next": "16.3.1",

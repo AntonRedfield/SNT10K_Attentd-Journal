@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSheetRows } from '@/lib/google-sheets';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { signToken, createSessionCookie } from '@/lib/auth';
-import { SHEET_USERS, User, SessionPayload, normalizeRole } from '@/lib/constants';
+import { SessionPayload, normalizeRole } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,21 +11,18 @@ export async function POST(request: NextRequest) {
 
     if (!identifier || !pin) {
       return NextResponse.json(
-        { error: 'ID Pengguna dan PIN 6-digit wajib diisi.' },
+        { error: 'ID Pengguna dan PIN wajib diisi.' },
         { status: 400 }
       );
     }
 
-    const users = await getSheetRows<User>(SHEET_USERS);
-    const targetId = identifier.toLowerCase();
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .or(`user_id.ilike.${identifier},username.ilike.${identifier}`)
+      .maybeSingle();
 
-    const user = users.find((u) => {
-      const uid = String(u.user_id ?? '').trim().toLowerCase();
-      const uname = String(u.username ?? '').trim().toLowerCase();
-      return uid === targetId || uname === targetId;
-    });
-
-    if (!user) {
+    if (error || !user) {
       return NextResponse.json(
         { error: 'Pengguna tidak ditemukan dalam sistem.' },
         { status: 404 }

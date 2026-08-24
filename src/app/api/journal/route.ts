@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows, appendRow, findRowIndex, deleteRow, updateRow } from '@/lib/google-sheets';
-import { SHEET_JOURNALS, JournalEntry } from '@/lib/constants';
-import { uploadFileToDrive } from '@/lib/google-drive';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+
+const BUCKET_NAME = 'attendance-evidence';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,16 +17,30 @@ export async function GET(request: NextRequest) {
 
     const className = request.nextUrl.searchParams.get('class_name') || session.assigned_class;
 
-    const journals = await getSheetRows<JournalEntry>(SHEET_JOURNALS);
-    const filtered = journals
-      .filter((j) => !className || className.toUpperCase() === 'ALL' || j.class_name === className)
-      .sort((a, b) => Number(a.week_number) - Number(b.week_number));
+    let query = supabaseAdmin
+      .from('journals')
+      .select('*')
+      .order('timestamp', { ascending: false });
 
-    return NextResponse.json({ journals: filtered });
+    if (className && className.toUpperCase() !== 'ALL') {
+      query = query.eq('class_name', className);
+    }
+
+    const { data: journals, error } = await query;
+
+    if (error) {
+      console.error('Supabase journal GET error:', error);
+      return NextResponse.json({ error: 'Gagal memuat catatan jurnal dari database.' }, { status: 500 });
+    }
+
+    // Sort by week_number numerically if possible
+    const sorted = (journals || []).sort((a, b) => Number(a.week_number || 0) - Number(b.week_number || 0));
+
+    return NextResponse.json({ journals: sorted });
   } catch (error) {
     console.error('Journal GET error:', error);
     return NextResponse.json(
-      { error: 'Gagal memuat catatan jurnal dari lembar kerja.' },
+      { error: 'Gagal memuat catatan jurnal dari database.' },
       { status: 500 }
     );
   }
@@ -66,25 +80,26 @@ export async function POST(request: NextRequest) {
           const sanitizedSubject = subjectName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Subject';
           const sanitizedUser = session.username.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'User';
           const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
-          const fileName = `${sanitizedSubject}_week${weekNumber}_${sanitizedUser}.${ext}`;
+          const fileName = `journals/${sanitizedSubject}_week${weekNumber}_${sanitizedUser}_${Date.now().toString().slice(-4)}.${ext}`;
 
-          try {
-            const uploadResult = await uploadFileToDrive({
-              buffer,
-              fileName,
-              mimeType: photoFile.type || 'image/jpeg',
+          const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+            .from(BUCKET_NAME)
+            .upload(fileName, buffer, {
+              contentType: photoFile.type || 'image/jpeg',
+              upsert: true,
             });
 
-            // Use direct URL or drive direct link
-            photoUrl = uploadResult.directUrl || uploadResult.webViewLink;
-          } catch (uploadError) {
-            console.warn('Google Drive Upload notice. Using direct embedded image storage fallback:', uploadError);
+          if (!uploadErr && uploadData) {
+            const { data: urlData } = supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .getPublicUrl(uploadData.path);
+            photoUrl = urlData.publicUrl;
+          } else {
             let base64Data = buffer.toString('base64');
-            const mime = photoFile.type || 'image/jpeg';
             if (base64Data.length > 44000) {
               base64Data = base64Data.slice(0, 44000);
             }
-            photoUrl = `data:${mime};base64,${base64Data}`;
+            photoUrl = `data:${photoFile.type || 'image/jpeg'};base64,${base64Data}`;
           }
         } catch (fileErr) {
           console.error('Photo buffer processing error:', fileErr);
@@ -117,16 +132,23 @@ export async function POST(request: NextRequest) {
     const journalId = `J-${Date.now()}`;
     const now = new Date().toISOString();
 
-    await appendRow(SHEET_JOURNALS, [
-      journalId,
-      now,
-      className,
-      subjectName,
-      String(weekNum),
-      topic,
-      session.username,
-      photoUrl,
-    ]);
+    const { error: insertErr } = await supabaseAdmin
+      .from('journals')
+      .insert({
+        journal_id: journalId,
+        timestamp: now,
+        class_name: className.trim(),
+        subject_name: subjectName.trim(),
+        week_number: String(weekNum),
+        topic: topic.trim(),
+        teacher_username: session.username,
+        photo_url: photoUrl,
+      });
+
+    if (insertErr) {
+      console.error('Supabase journal insert error:', insertErr);
+      return NextResponse.json({ error: 'Gagal menyimpan catatan jurnal ke database.' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -137,7 +159,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Journal POST error:', error);
     return NextResponse.json(
-      { error: 'Gagal menyimpan catatan jurnal ke lembar kerja.' },
+      { error: 'Gagal menyimpan catatan jurnal ke database.' },
       { status: 500 }
     );
   }
@@ -162,16 +184,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const rowIndex = await findRowIndex(SHEET_JOURNALS, (row) => row.journal_id === journalId);
+    const { error: deleteErr } = await supabaseAdmin
+      .from('journals')
+      .delete()
+      .eq('journal_id', journalId);
 
-    if (rowIndex === -1) {
-      return NextResponse.json(
-        { error: 'Catatan jurnal tidak ditemukan.' },
-        { status: 404 }
-      );
+    if (deleteErr) {
+      console.error('Supabase journal delete error:', deleteErr);
+      return NextResponse.json({ error: 'Gagal menghapus catatan jurnal dari database.' }, { status: 500 });
     }
-
-    await deleteRow(SHEET_JOURNALS, rowIndex);
 
     return NextResponse.json({
       success: true,
@@ -180,7 +201,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Journal DELETE error:', error);
     return NextResponse.json(
-      { error: 'Gagal menghapus catatan jurnal dari lembar kerja.' },
+      { error: 'Gagal menghapus catatan jurnal dari database.' },
       { status: 500 }
     );
   }
@@ -226,23 +247,26 @@ export async function PUT(request: NextRequest) {
           const sanitizedSubject = subjectName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Subject';
           const sanitizedUser = session.username.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'User';
           const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
-          const fileName = `${sanitizedSubject}_week${weekNumber}_${sanitizedUser}.${ext}`;
+          const fileName = `journals/${sanitizedSubject}_week${weekNumber}_${sanitizedUser}_${Date.now().toString().slice(-4)}.${ext}`;
 
-          try {
-            const uploadResult = await uploadFileToDrive({
-              buffer,
-              fileName,
-              mimeType: photoFile.type || 'image/jpeg',
+          const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+            .from(BUCKET_NAME)
+            .upload(fileName, buffer, {
+              contentType: photoFile.type || 'image/jpeg',
+              upsert: true,
             });
-            photoUrl = uploadResult.directUrl || uploadResult.webViewLink;
-          } catch (uploadError) {
-            console.warn('Google Drive Upload notice in PUT. Using direct embedded image storage fallback:', uploadError);
+
+          if (!uploadErr && uploadData) {
+            const { data: urlData } = supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .getPublicUrl(uploadData.path);
+            photoUrl = urlData.publicUrl;
+          } else {
             let base64Data = buffer.toString('base64');
-            const mime = photoFile.type || 'image/jpeg';
             if (base64Data.length > 44000) {
               base64Data = base64Data.slice(0, 44000);
             }
-            photoUrl = `data:${mime};base64,${base64Data}`;
+            photoUrl = `data:${photoFile.type || 'image/jpeg'};base64,${base64Data}`;
           }
         } catch (fileErr) {
           console.error('Photo buffer processing error:', fileErr);
@@ -281,12 +305,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Read existing row to preserve timestamp, teacher, and photo_url if not replaced
-    const journals = await getSheetRows<JournalEntry>(SHEET_JOURNALS);
-    const existing = journals.find((j) => j.journal_id === journalId);
+    // Fetch existing
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('journals')
+      .select('*')
+      .eq('journal_id', journalId)
+      .maybeSingle();
 
-    const rowIndex = await findRowIndex(SHEET_JOURNALS, (row) => row.journal_id === journalId);
-    if (rowIndex === -1 || !existing) {
+    if (fetchErr || !existing) {
       return NextResponse.json({ error: 'Catatan jurnal tidak ditemukan.' }, { status: 404 });
     }
 
@@ -297,16 +323,21 @@ export async function PUT(request: NextRequest) {
       finalPhotoUrl = photoUrl;
     }
 
-    await updateRow(SHEET_JOURNALS, rowIndex, [
-      journalId,
-      existing.timestamp || new Date().toISOString(),
-      className,
-      subjectName,
-      String(weekNum),
-      topic,
-      existing.teacher_username || session.username,
-      finalPhotoUrl,
-    ]);
+    const { error: updateErr } = await supabaseAdmin
+      .from('journals')
+      .update({
+        class_name: className.trim(),
+        subject_name: subjectName.trim(),
+        week_number: String(weekNum),
+        topic: topic.trim(),
+        photo_url: finalPhotoUrl,
+      })
+      .eq('journal_id', journalId);
+
+    if (updateErr) {
+      console.error('Supabase journal update error:', updateErr);
+      return NextResponse.json({ error: 'Gagal memperbarui catatan jurnal di database.' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
@@ -317,7 +348,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Journal PUT error:', error);
     return NextResponse.json(
-      { error: 'Gagal memperbarui catatan jurnal di lembar kerja.' },
+      { error: 'Gagal memperbarui catatan jurnal di database.' },
       { status: 500 }
     );
   }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows, appendRows } from '@/lib/google-sheets';
-import { SHEET_ATTENDANCE, AttendanceRecord } from '@/lib/constants';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,18 +12,31 @@ export async function GET(request: NextRequest) {
     const className = request.nextUrl.searchParams.get('class_name') || session.assigned_class;
     const date = request.nextUrl.searchParams.get('date');
 
-    const records = await getSheetRows<AttendanceRecord>(SHEET_ATTENDANCE);
-    let filtered = records.filter((r) => r.class_name === className);
+    let query = supabaseAdmin
+      .from('attendance')
+      .select('*')
+      .order('timestamp', { ascending: false });
 
-    if (date) {
-      filtered = filtered.filter((r) => r.date === date);
+    if (className && className.toUpperCase() !== 'ALL') {
+      query = query.eq('class_name', className);
     }
 
-    return NextResponse.json({ records: filtered });
+    if (date) {
+      query = query.eq('date', date);
+    }
+
+    const { data: records, error } = await query;
+
+    if (error) {
+      console.error('Supabase attendance query error:', error);
+      return NextResponse.json({ error: 'Gagal memuat data presensi dari database.' }, { status: 500 });
+    }
+
+    return NextResponse.json({ records: records || [] });
   } catch (error) {
     console.error('Attendance GET error:', error);
     return NextResponse.json(
-      { error: 'Gagal memuat data presensi dari lembar kerja.' },
+      { error: 'Gagal memuat data presensi dari database.' },
       { status: 500 }
     );
   }
@@ -48,32 +60,37 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString();
 
-    // Build 2D array for batch append
-    const rows: string[][] = records.map(
-      (r: { student_id: string; full_name: string; attendance_status: string; note?: string; attachment_url?: string }) => [
-        now,                      // timestamp
-        date,                     // date
-        class_name,               // class_name
-        r.student_id,             // student_id
-        r.full_name,              // full_name
-        r.attendance_status,      // attendance_status
-        r.note || '',             // note
-        session.username,         // recorded_by_username
-        r.attachment_url || '',   // attachment_url (Drive link / photo proof)
-      ]
+    const rowsToInsert = records.map(
+      (r: { student_id: string; full_name: string; attendance_status: string; note?: string; attachment_url?: string }) => ({
+        timestamp: now,
+        date: date.trim(),
+        class_name: class_name.trim(),
+        student_id: r.student_id.trim(),
+        full_name: r.full_name.trim(),
+        attendance_status: r.attendance_status || 'Hadir',
+        note: r.note || '',
+        recorded_by_username: session.username,
+        attachment_url: r.attachment_url || '',
+      })
     );
 
-    // Single batch append
-    await appendRows(SHEET_ATTENDANCE, rows);
+    const { error: insertErr } = await supabaseAdmin
+      .from('attendance')
+      .insert(rowsToInsert);
+
+    if (insertErr) {
+      console.error('Supabase attendance insert error:', insertErr);
+      return NextResponse.json({ error: 'Gagal menyimpan data presensi ke database.' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Presensi kelas ${class_name} untuk tanggal ${date} berhasil disimpan (${rows.length} siswa).`,
+      message: `Presensi kelas ${class_name} untuk tanggal ${date} berhasil disimpan (${rowsToInsert.length} siswa).`,
     });
   } catch (error) {
     console.error('Attendance POST error:', error);
     return NextResponse.json(
-      { error: 'Gagal menyimpan data presensi ke lembar kerja.' },
+      { error: 'Gagal menyimpan data presensi ke database.' },
       { status: 500 }
     );
   }

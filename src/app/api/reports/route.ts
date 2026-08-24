@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getSheetRows } from '@/lib/google-sheets';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
-  SHEET_STUDENTS,
-  SHEET_ATTENDANCE,
-  SHEET_JOURNALS,
-  SHEET_SUBJECTS,
-  SHEET_USERS,
   Student,
   AttendanceRecord,
   JournalEntry,
@@ -15,13 +10,8 @@ import {
   normalizeStatus,
 } from '@/lib/constants';
 
-/**
- * Helper to check if a date string falls within [startDate, endDate] inclusive.
- * Handles ISO timestamps "2026-08-12T..." and date strings "2026-08-12"
- */
 function isDateInRange(dateStr: string, startDate?: string, endDate?: string): boolean {
   if (!dateStr) return true;
-  // Extract YYYY-MM-DD
   const cleanDate = dateStr.slice(0, 10);
   if (startDate && cleanDate < startDate) return false;
   if (endDate && cleanDate > endDate) return false;
@@ -43,16 +33,16 @@ export async function GET(request: NextRequest) {
     const teacherName = searchParams.get('teacher') || 'ALL';
     const subjectName = searchParams.get('subject') || 'ALL';
 
-    // 1. Fetch metadata needed (classList, subjectList, teacherList)
-    const [allStudents, allSubjects, allUsers] = await Promise.all([
-      getSheetRows<Student>(SHEET_STUDENTS),
-      getSheetRows<SubjectItem>(SHEET_SUBJECTS).catch(() => []),
-      getSheetRows<User>(SHEET_USERS).catch(() => []),
+    // 1. Fetch metadata in parallel from Supabase
+    const [studentsRes, subjectsRes, usersRes] = await Promise.all([
+      supabaseAdmin.from('students').select('*').eq('is_active', true),
+      supabaseAdmin.from('subjects').select('*').eq('is_active', true),
+      supabaseAdmin.from('users').select('username, role, nip'),
     ]);
 
-    const activeStudents = allStudents.filter(
-      (s) => s.is_active?.toUpperCase() !== 'FALSE'
-    );
+    const activeStudents = (studentsRes.data || []) as Student[];
+    const allSubjects = (subjectsRes.data || []) as SubjectItem[];
+    const allUsers = (usersRes.data || []) as User[];
 
     const classList = Array.from(new Set(activeStudents.map((s) => s.class_name).filter(Boolean))).sort();
     const teacherList = Array.from(new Set(allUsers.filter((u) => u.role === 'Teacher' || u.role === 'Admin').map((u) => u.username))).sort();
@@ -67,26 +57,37 @@ export async function GET(request: NextRequest) {
     // REPORT TYPE: ATTENDANCE RECAP
     // =========================================================================
     if (reportType === 'attendance') {
-      const allAttendance = await getSheetRows<AttendanceRecord>(SHEET_ATTENDANCE);
+      let query = supabaseAdmin.from('attendance').select('*');
 
-      // Filter students by requested class
+      if (className && className !== 'ALL') {
+        query = query.eq('class_name', className);
+      }
+      if (startDate) {
+        query = query.gte('date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('date', endDate);
+      }
+
+      const { data: attendanceData, error: attErr } = await query;
+      if (attErr) {
+        console.error('Supabase attendance report error:', attErr);
+        return NextResponse.json({ error: 'Gagal memuat rekap presensi.' }, { status: 500 });
+      }
+
+      const allAttendance = (attendanceData || []) as AttendanceRecord[];
+
+      // Filter target students
       const targetStudents = (className && className !== 'ALL')
         ? activeStudents.filter((s) => s.class_name === className)
         : activeStudents;
-
-      // Filter attendance records by date range & class
-      const filteredRecords = allAttendance.filter((r) => {
-        if (className && className !== 'ALL' && r.class_name !== className) return false;
-        const recordDate = r.date || r.timestamp;
-        return isDateInRange(recordDate, startDate, endDate);
-      });
 
       // Aggregate statistics per student
       const aggregatedStudents = targetStudents.map((st, index) => {
         const targetId = (st.student_id || '').toString().trim().toLowerCase();
         const targetName = (st.full_name || '').toString().trim().toLowerCase();
 
-        const studentRecords = filteredRecords.filter((r) => {
+        const studentRecords = allAttendance.filter((r) => {
           const recId = (r.student_id || '').toString().trim().toLowerCase();
           if (recId && targetId && recId === targetId) return true;
 
@@ -142,7 +143,7 @@ export async function GET(request: NextRequest) {
         : '100.0';
 
       // Extract absence records with notes and attachment evidence
-      const absenceRecords = filteredRecords
+      const absenceRecords = allAttendance
         .filter((r) => {
           const norm = normalizeStatus(r.attendance_status || (r as any).status);
           return norm !== 'Hadir';
@@ -190,15 +191,28 @@ export async function GET(request: NextRequest) {
     // REPORT TYPE: JOURNAL RECAP
     // =========================================================================
     if (reportType === 'journal') {
-      const allJournals = await getSheetRows<JournalEntry>(SHEET_JOURNALS);
+      let query = supabaseAdmin.from('journals').select('*');
+
+      if (className && className !== 'ALL') {
+        query = query.eq('class_name', className);
+      }
+      if (teacherName && teacherName !== 'ALL') {
+        query = query.ilike('teacher_username', teacherName);
+      }
+      if (subjectName && subjectName !== 'ALL') {
+        query = query.ilike('subject_name', subjectName);
+      }
+
+      const { data: journalData, error: jErr } = await query;
+      if (jErr) {
+        console.error('Supabase journals report error:', jErr);
+        return NextResponse.json({ error: 'Gagal memuat rekap jurnal.' }, { status: 500 });
+      }
+
+      const allJournals = (journalData || []) as JournalEntry[];
 
       const filteredJournals = allJournals
-        .filter((j) => {
-          if (className && className !== 'ALL' && j.class_name !== className) return false;
-          if (teacherName && teacherName !== 'ALL' && j.teacher_username?.toLowerCase() !== teacherName.toLowerCase()) return false;
-          if (subjectName && subjectName !== 'ALL' && j.subject_name?.toLowerCase() !== subjectName.toLowerCase()) return false;
-          return isDateInRange(j.timestamp, startDate, endDate);
-        })
+        .filter((j) => isDateInRange(j.timestamp, startDate, endDate))
         .sort((a, b) => {
           const wA = Number(a.week_number) || 0;
           const wB = Number(b.week_number) || 0;
