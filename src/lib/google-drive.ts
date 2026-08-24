@@ -22,7 +22,7 @@ export interface UploadDriveResult {
 
 /**
  * Upload an image buffer directly to the specified Google Drive folder.
- * Automatically configures public read access for embedding & print display.
+ * Supports Google Apps Script Web App (Personal 15GB Drive) and Google Service Account.
  */
 export async function uploadFileToDrive({
   buffer,
@@ -35,62 +35,110 @@ export async function uploadFileToDrive({
   mimeType?: string;
   folderId?: string;
 }): Promise<UploadDriveResult> {
-  const drive = getDrive();
+  const webAppUrl =
+    process.env.GOOGLE_DRIVE_WEBAPP_URL?.trim() ||
+    process.env.GOOGLE_APPS_SCRIPT_URL?.trim();
 
-  // Create readable stream from buffer
-  const bufferStream = new Readable();
-  bufferStream.push(buffer);
-  bufferStream.push(null);
+  // Method 1: Google Apps Script Web App (Bypasses Service Account 0MB quota on personal Gmail)
+  if (webAppUrl) {
+    try {
+      const base64 = buffer.toString('base64');
+      const payload = {
+        folderId,
+        fileName,
+        mimeType,
+        base64,
+      };
 
-  const fileMetadata = {
-    name: fileName,
-    parents: [folderId],
-  };
+      const res = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-  const media = {
-    mimeType,
-    body: bufferStream,
-  };
+      const data = await res.json();
+      if (data && (data.fileId || data.directUrl || data.webViewLink)) {
+        const fileId = data.fileId || '';
+        const directUrl = data.directUrl || (fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : '');
+        const webViewLink = data.webViewLink || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '');
+        const thumbnailUrl = data.thumbnailUrl || (fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000` : directUrl);
 
-  // Upload file to Google Drive
-  const response = await drive.files.create({
-    requestBody: fileMetadata,
-    media: media,
-    supportsAllDrives: true,
-    supportsTeamDrives: true,
-    fields: 'id, name, webViewLink, webContentLink, thumbnailLink',
-  });
-
-  const fileId = response.data.id;
-  if (!fileId) {
-    throw new Error('Gagal mendapatkan ID file setelah upload ke Google Drive.');
+        return {
+          fileId,
+          fileName,
+          webViewLink,
+          directUrl: directUrl || webViewLink,
+          thumbnailUrl,
+        };
+      }
+      console.warn('Google Apps Script Web App returned non-success:', data);
+    } catch (webAppErr) {
+      console.error('Google Apps Script Web App upload error:', webAppErr);
+    }
   }
 
-  // Grant public read permission to allow image rendering in the app and report prints
+  // Method 2: Google Service Account
   try {
-    await drive.permissions.create({
-      fileId,
-      requestBody: {
-        role: 'reader',
-        type: 'anyone',
-      },
+    const drive = getDrive();
+
+    // Create readable stream from buffer
+    const bufferStream = new Readable();
+    bufferStream.push(buffer);
+    bufferStream.push(null);
+
+    const fileMetadata = {
+      name: fileName,
+      parents: [folderId],
+    };
+
+    const media = {
+      mimeType,
+      body: bufferStream,
+    };
+
+    // Upload file to Google Drive
+    const response = await drive.files.create({
+      requestBody: fileMetadata,
+      media: media,
+      supportsAllDrives: true,
+      fields: 'id, name, webViewLink, webContentLink, thumbnailLink',
     });
-  } catch (permErr) {
-    console.warn('Note: Could not explicitly set public reader permission on Drive file:', permErr);
+
+    const fileId = response.data.id;
+    if (!fileId) {
+      throw new Error('Gagal mendapatkan ID file setelah upload ke Google Drive.');
+    }
+
+    // Grant public read permission to allow image rendering in the app and report prints
+    try {
+      await drive.permissions.create({
+        fileId,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone',
+        },
+        supportsAllDrives: true,
+      });
+    } catch (permErr) {
+      console.warn('Note: Could not explicitly set public reader permission on Drive file:', permErr);
+    }
+
+    // Direct image URL for high-res embedding
+    const directUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
+    const webViewLink = response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    const thumbnailUrl = response.data.thumbnailLink || `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+
+    return {
+      fileId,
+      fileName: response.data.name || fileName,
+      webViewLink,
+      directUrl,
+      thumbnailUrl,
+    };
+  } catch (driveErr) {
+    console.error('Direct Google Drive API upload error:', driveErr);
+    throw driveErr;
   }
-
-  // Direct image URL for high-res embedding
-  const directUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
-  const webViewLink = response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
-  const thumbnailUrl = response.data.thumbnailLink || `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
-
-  return {
-    fileId,
-    fileName: response.data.name || fileName,
-    webViewLink,
-    directUrl,
-    thumbnailUrl,
-  };
 }
 
 /**

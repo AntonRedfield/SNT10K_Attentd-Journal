@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { uploadFileToDrive } from '@/lib/google-drive';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,39 +51,53 @@ export async function POST(request: NextRequest) {
     const suffix = Date.now().toString().slice(-4);
 
     // Format: activity_date_user_suffix.ext (e.g. bukti-presensi-7a-sakit_24-08-2026_student-name_1.jpg)
-    const fileName = `student-evidence/bukti-presensi-${cleanClass}-${cleanStatus}_${dateFormatted}_${cleanStudent}_${suffix}.${ext}`;
+    const baseFileName = `bukti-presensi-${cleanClass}-${cleanStatus}_${dateFormatted}_${cleanStudent}_${suffix}.${ext}`;
     const contentType = photoFile.type || 'image/jpeg';
-
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, buffer, {
-        contentType,
-        upsert: true,
-      });
-
     let photoUrl = '';
 
-    if (uploadError) {
-      console.warn('Supabase storage upload warning:', uploadError);
-      // Fallback base64 data URI if storage fails
-      let base64Data = buffer.toString('base64');
-      if (base64Data.length > 44000) {
-        base64Data = base64Data.slice(0, 44000);
+    // 1. Primary: Upload to Google Drive
+    try {
+      const driveRes = await uploadFileToDrive({
+        buffer,
+        fileName: baseFileName,
+        mimeType: contentType,
+      });
+      if (driveRes && (driveRes.directUrl || driveRes.webViewLink)) {
+        photoUrl = driveRes.directUrl || driveRes.webViewLink;
       }
-      photoUrl = `data:${contentType};base64,${base64Data}`;
-    } else {
-      const { data: urlData } = supabaseAdmin.storage
+    } catch (driveError) {
+      console.warn('Google Drive upload warning, attempting Supabase storage fallback:', driveError);
+    }
+
+    // 2. Secondary Fallback: Supabase Storage if Drive is not configured
+    if (!photoUrl) {
+      const fileName = `student-evidence/${baseFileName}`;
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from(BUCKET_NAME)
-        .getPublicUrl(uploadData.path);
-      photoUrl = urlData.publicUrl;
+        .upload(fileName, buffer, {
+          contentType,
+          upsert: true,
+        });
+
+      if (!uploadError && uploadData) {
+        const { data: urlData } = supabaseAdmin.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(uploadData.path);
+        photoUrl = urlData.publicUrl;
+      } else {
+        let base64Data = buffer.toString('base64');
+        if (base64Data.length > 44000) {
+          base64Data = base64Data.slice(0, 44000);
+        }
+        photoUrl = `data:${contentType};base64,${base64Data}`;
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Foto bukti berhasil diunggah ke Supabase Storage.',
+      message: 'Foto bukti berhasil diunggah.',
       photo_url: photoUrl,
-      fileName,
+      fileName: baseFileName,
     });
   } catch (error) {
     console.error('Attendance Upload POST error:', error);

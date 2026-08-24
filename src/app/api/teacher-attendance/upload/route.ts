@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { normalizeRole } from '@/lib/constants';
+import { uploadFileToDrive } from '@/lib/google-drive';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,39 +59,52 @@ export async function POST(request: NextRequest) {
 
     // Format: activity_date_user_suffix.ext (e.g. presensi-guru-masuk_24-08-2026_teacher-name_1.jpg)
     const baseFileName = `presensi-guru-${cleanType}_${dateFormatted}_${cleanTeacher}_${suffix}.${ext}`;
-    const fileName = `teacher-attendance/${baseFileName}`;
     const contentType = photoFile.type || 'image/jpeg';
-
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, buffer, {
-        contentType,
-        upsert: true,
-      });
-
     let photoUrl = '';
 
-    if (uploadError) {
-      console.warn('Supabase teacher attendance photo upload warning:', uploadError);
-      // Fallback base64 data URI if storage fails
-      let base64Data = buffer.toString('base64');
-      if (base64Data.length > 50000) {
-        base64Data = base64Data.slice(0, 50000);
+    // 1. Primary: Upload directly to Google Drive
+    try {
+      const driveRes = await uploadFileToDrive({
+        buffer,
+        fileName: baseFileName,
+        mimeType: contentType,
+      });
+      if (driveRes && (driveRes.directUrl || driveRes.webViewLink)) {
+        photoUrl = driveRes.directUrl || driveRes.webViewLink;
       }
-      photoUrl = `data:${contentType};base64,${base64Data}`;
-    } else {
-      const { data: urlData } = supabaseAdmin.storage
+    } catch (driveError) {
+      console.warn('Google Drive teacher selfie upload warning, attempting Supabase storage fallback:', driveError);
+    }
+
+    // 2. Secondary Fallback: Supabase Storage if Drive is not configured
+    if (!photoUrl) {
+      const fileName = `teacher-attendance/${baseFileName}`;
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from(BUCKET_NAME)
-        .getPublicUrl(uploadData.path);
-      photoUrl = urlData.publicUrl;
+        .upload(fileName, buffer, {
+          contentType,
+          upsert: true,
+        });
+
+      if (!uploadError && uploadData) {
+        const { data: urlData } = supabaseAdmin.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(uploadData.path);
+        photoUrl = urlData.publicUrl;
+      } else {
+        let base64Data = buffer.toString('base64');
+        if (base64Data.length > 50000) {
+          base64Data = base64Data.slice(0, 50000);
+        }
+        photoUrl = `data:${contentType};base64,${base64Data}`;
+      }
     }
 
     return NextResponse.json({
       success: true,
       message: 'Foto selfie presensi berhasil diunggah.',
       photo_url: photoUrl,
-      fileName,
+      fileName: baseFileName,
     });
   } catch (error) {
     console.error('Teacher Attendance Upload POST error:', error);

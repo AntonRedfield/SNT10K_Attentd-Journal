@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { uploadFileToDrive } from '@/lib/google-drive';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,26 +89,45 @@ export async function POST(request: NextRequest) {
           const suffix = Date.now().toString().slice(-4);
 
           // Format: activity_date_user_suffix.ext (e.g. journal-math_24-08-2026_teacher-name_1.jpg)
-          const fileName = `journals/journal-${sanitizedSubject}_${dateFormatted}_${sanitizedUser}_${suffix}.${ext}`;
+          const baseFileName = `journal-${sanitizedSubject}_${dateFormatted}_${sanitizedUser}_${suffix}.${ext}`;
+          const contentType = photoFile.type || 'image/jpeg';
 
-          const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, buffer, {
-              contentType: photoFile.type || 'image/jpeg',
-              upsert: true,
+          // 1. Primary: Upload directly to Google Drive
+          try {
+            const driveRes = await uploadFileToDrive({
+              buffer,
+              fileName: baseFileName,
+              mimeType: contentType,
             });
-
-          if (!uploadErr && uploadData) {
-            const { data: urlData } = supabaseAdmin.storage
-              .from(BUCKET_NAME)
-              .getPublicUrl(uploadData.path);
-            photoUrl = urlData.publicUrl;
-          } else {
-            let base64Data = buffer.toString('base64');
-            if (base64Data.length > 44000) {
-              base64Data = base64Data.slice(0, 44000);
+            if (driveRes && (driveRes.directUrl || driveRes.webViewLink)) {
+              photoUrl = driveRes.directUrl || driveRes.webViewLink;
             }
-            photoUrl = `data:${photoFile.type || 'image/jpeg'};base64,${base64Data}`;
+          } catch (driveErr) {
+            console.warn('Google Drive journal photo upload warning, attempting Supabase storage fallback:', driveErr);
+          }
+
+          // 2. Secondary Fallback: Supabase Storage if Drive is not configured
+          if (!photoUrl) {
+            const fileName = `journals/${baseFileName}`;
+            const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .upload(fileName, buffer, {
+                contentType,
+                upsert: true,
+              });
+
+            if (!uploadErr && uploadData) {
+              const { data: urlData } = supabaseAdmin.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(uploadData.path);
+              photoUrl = urlData.publicUrl;
+            } else {
+              let base64Data = buffer.toString('base64');
+              if (base64Data.length > 44000) {
+                base64Data = base64Data.slice(0, 44000);
+              }
+              photoUrl = `data:${contentType};base64,${base64Data}`;
+            }
           }
         } catch (fileErr) {
           console.error('Photo buffer processing error:', fileErr);
@@ -252,29 +272,51 @@ export async function PUT(request: NextRequest) {
         try {
           const arrayBuffer = await photoFile.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
-          const sanitizedSubject = subjectName.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Subject';
-          const sanitizedUser = session.username.trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'User';
+          const d = new Date();
+          const dateFormatted = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+          const sanitizedSubject = subjectName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'mapel';
+          const sanitizedUser = session.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'guru';
           const ext = photoFile.type.includes('png') ? 'png' : 'jpg';
-          const fileName = `journals/${sanitizedSubject}_week${weekNumber}_${sanitizedUser}_${Date.now().toString().slice(-4)}.${ext}`;
+          const suffix = Date.now().toString().slice(-4);
+          const baseFileName = `journal-${sanitizedSubject}_${dateFormatted}_${sanitizedUser}_${suffix}.${ext}`;
+          const contentType = photoFile.type || 'image/jpeg';
 
-          const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, buffer, {
-              contentType: photoFile.type || 'image/jpeg',
-              upsert: true,
+          // 1. Primary: Upload directly to Google Drive
+          try {
+            const driveRes = await uploadFileToDrive({
+              buffer,
+              fileName: baseFileName,
+              mimeType: contentType,
             });
-
-          if (!uploadErr && uploadData) {
-            const { data: urlData } = supabaseAdmin.storage
-              .from(BUCKET_NAME)
-              .getPublicUrl(uploadData.path);
-            photoUrl = urlData.publicUrl;
-          } else {
-            let base64Data = buffer.toString('base64');
-            if (base64Data.length > 44000) {
-              base64Data = base64Data.slice(0, 44000);
+            if (driveRes && (driveRes.directUrl || driveRes.webViewLink)) {
+              photoUrl = driveRes.directUrl || driveRes.webViewLink;
             }
-            photoUrl = `data:${photoFile.type || 'image/jpeg'};base64,${base64Data}`;
+          } catch (driveErr) {
+            console.warn('Google Drive journal photo update warning, attempting Supabase storage fallback:', driveErr);
+          }
+
+          // 2. Secondary Fallback: Supabase Storage if Drive is not configured
+          if (!photoUrl) {
+            const fileName = `journals/${baseFileName}`;
+            const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .upload(fileName, buffer, {
+                contentType,
+                upsert: true,
+              });
+
+            if (!uploadErr && uploadData) {
+              const { data: urlData } = supabaseAdmin.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(uploadData.path);
+              photoUrl = urlData.publicUrl;
+            } else {
+              let base64Data = buffer.toString('base64');
+              if (base64Data.length > 44000) {
+                base64Data = base64Data.slice(0, 44000);
+              }
+              photoUrl = `data:${contentType};base64,${base64Data}`;
+            }
           }
         } catch (fileErr) {
           console.error('Photo buffer processing error:', fileErr);
