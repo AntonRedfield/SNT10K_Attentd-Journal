@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { SessionPayload, ROLE_LABELS, normalizeRole } from '@/lib/constants';
 import { Spinner } from '@/components/Spinner';
 import { SettingsIcon, LogoutIcon, LockIcon } from '@/components/Icons';
@@ -14,6 +14,7 @@ interface NavbarProps {
 
 export default function Navbar({ user: initialUser }: NavbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<SessionPayload>(initialUser);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFastLoginModal, setShowFastLoginModal] = useState(false);
@@ -138,14 +139,16 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
           boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
         }}
       >
+        {/* ROW 1: Top Brand & User Profile Bar */}
         <div
           className="container-app"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            minHeight: '56px',
+            minHeight: '54px',
             padding: '8px 0',
+            borderBottom: '1px solid #f1f5f9',
           }}
         >
           {/* Logo / Brand */}
@@ -168,7 +171,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               alt="Logo SNT Kemendikdasmen"
               className="navbar-logo"
               style={{
-                height: '36px',
+                height: '38px',
                 width: 'auto',
                 objectFit: 'contain',
                 display: 'block',
@@ -179,7 +182,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               <div
                 className="navbar-brand-title"
                 style={{
-                  fontSize: '15px',
+                  fontSize: '15.5px',
                   fontWeight: 800,
                   letterSpacing: '-0.02em',
                   color: '#1e3863',
@@ -204,114 +207,8 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
             </div>
           </button>
 
-          {/* Main Navigation Links */}
-          <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="btn btn-sm"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-primary)',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                padding: '6px 10px',
-                cursor: 'pointer',
-                borderRadius: '6px',
-              }}
-            >
-              Dasbor
-            </button>
-            <button
-              onClick={() => router.push('/attendance')}
-              className="btn btn-sm"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-primary)',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                padding: '6px 10px',
-                cursor: 'pointer',
-                borderRadius: '6px',
-              }}
-            >
-              Presensi
-            </button>
-            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
-              <button
-                onClick={() => router.push('/teacher-attendance')}
-                className="btn btn-sm"
-                style={{
-                  background: 'rgba(225, 29, 72, 0.1)',
-                  border: '1px solid rgba(225, 29, 72, 0.3)',
-                  color: '#e11d48',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  padding: '6px 11px',
-                  cursor: 'pointer',
-                  borderRadius: '6px',
-                }}
-              >
-                📸 Presensi Guru
-              </button>
-            )}
-            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
-              <button
-                onClick={() => router.push('/journal')}
-                className="btn btn-sm"
-                style={{
-                  background: 'rgba(14, 165, 233, 0.1)',
-                  border: '1px solid rgba(14, 165, 233, 0.3)',
-                  color: '#0284c7',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  padding: '6px 11px',
-                  cursor: 'pointer',
-                  borderRadius: '6px',
-                }}
-              >
-                📖 Jurnal Mengajar
-              </button>
-            )}
-            <button
-              onClick={() => router.push('/recap')}
-              className="btn btn-sm"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-primary)',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                padding: '6px 10px',
-                cursor: 'pointer',
-                borderRadius: '6px',
-              }}
-            >
-              Rekap Laporan
-            </button>
-            {currentRole === 'Admin' && (
-              <button
-                onClick={() => router.push('/admin')}
-                className="btn btn-sm"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-primary)',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  padding: '6px 10px',
-                  cursor: 'pointer',
-                  borderRadius: '6px',
-                }}
-              >
-                Admin
-              </button>
-            )}
-          </div>
-
           {/* User Info Bar (Gear | Username | Role) + Logout Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {/* Unified User Info Pill */}
             <div
               style={{
@@ -320,7 +217,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
                 background: '#f8fafc',
                 border: '1px solid #e2e8f0',
                 borderRadius: '8px',
-                padding: '4px 10px',
+                padding: '4px 8px',
                 gap: '8px',
               }}
             >
@@ -355,11 +252,11 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               {/* 2. Username */}
               <div
                 style={{
-                  fontSize: '13px',
+                  fontSize: '12.5px',
                   fontWeight: 700,
                   color: 'var(--text-primary)',
                   whiteSpace: 'nowrap',
-                  maxWidth: '140px',
+                  maxWidth: '160px',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
@@ -373,7 +270,7 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
 
               {/* 3. Role */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                <span className={`badge ${roleBadgeClass}`} style={{ fontSize: '11px', padding: '2px 8px' }}>
+                <span className={`badge ${roleBadgeClass}`} style={{ fontSize: '11px', padding: '2px 7px' }}>
                   <span className="badge-dot" />
                   {roleLabel}
                 </span>
@@ -401,11 +298,11 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               onClick={handleLogout}
               className="btn btn-secondary btn-sm"
               style={{
-                padding: '6px 12px',
+                padding: '5px 10px',
                 fontSize: '12px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '5px',
                 borderRadius: '8px',
                 whiteSpace: 'nowrap',
               }}
@@ -414,6 +311,172 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
               <span className="hide-mobile">Keluar</span>
               <LogoutIcon size={14} />
             </button>
+          </div>
+        </div>
+
+        {/* ROW 2: Dedicated Navigation Bar Below Header */}
+        <div
+          style={{
+            background: '#ffffff',
+            borderTop: '1px solid rgba(0, 0, 0, 0.02)',
+            padding: '4px 0',
+          }}
+        >
+          <div
+            className="container-app"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              paddingTop: '2px',
+              paddingBottom: '2px',
+            }}
+          >
+            {/* 1. Dasbor */}
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="btn btn-sm"
+              style={{
+                background: pathname === '/dashboard' ? '#1e3863' : 'transparent',
+                border: pathname === '/dashboard' ? '1px solid #1e3863' : '1px solid transparent',
+                color: pathname === '/dashboard' ? '#ffffff' : 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: pathname === '/dashboard' ? 700 : 600,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>📊</span> Dasbor
+            </button>
+
+            {/* 2. Presensi Siswa */}
+            <button
+              onClick={() => router.push('/attendance')}
+              className="btn btn-sm"
+              style={{
+                background: pathname === '/attendance' ? '#1e3863' : 'transparent',
+                border: pathname === '/attendance' ? '1px solid #1e3863' : '1px solid transparent',
+                color: pathname === '/attendance' ? '#ffffff' : 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: pathname === '/attendance' ? 700 : 600,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>📋</span> Presensi
+            </button>
+
+            {/* 3. Presensi Guru (Teacher & Admin) */}
+            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
+              <button
+                onClick={() => router.push('/teacher-attendance')}
+                className="btn btn-sm"
+                style={{
+                  background: pathname === '/teacher-attendance' ? '#e11d48' : 'rgba(225, 29, 72, 0.08)',
+                  border: pathname === '/teacher-attendance' ? '1px solid #e11d48' : '1px solid rgba(225, 29, 72, 0.25)',
+                  color: pathname === '/teacher-attendance' ? '#ffffff' : '#e11d48',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>📸</span> Presensi Guru
+              </button>
+            )}
+
+            {/* 4. Jurnal Mengajar (Teacher & Admin) */}
+            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
+              <button
+                onClick={() => router.push('/journal')}
+                className="btn btn-sm"
+                style={{
+                  background: pathname === '/journal' ? '#0284c7' : 'rgba(14, 165, 233, 0.08)',
+                  border: pathname === '/journal' ? '1px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.25)',
+                  color: pathname === '/journal' ? '#ffffff' : '#0284c7',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>📖</span> Jurnal Mengajar
+              </button>
+            )}
+
+            {/* 5. Rekap Laporan */}
+            <button
+              onClick={() => router.push('/recap')}
+              className="btn btn-sm"
+              style={{
+                background: pathname === '/recap' ? '#1e3863' : 'transparent',
+                border: pathname === '/recap' ? '1px solid #1e3863' : '1px solid transparent',
+                color: pathname === '/recap' ? '#ffffff' : 'var(--text-primary)',
+                fontSize: '12.5px',
+                fontWeight: pathname === '/recap' ? 700 : 600,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>📑</span> Rekap Laporan
+            </button>
+
+            {/* 6. Admin Panel (Admin only) */}
+            {currentRole === 'Admin' && (
+              <button
+                onClick={() => router.push('/admin')}
+                className="btn btn-sm"
+                style={{
+                  background: pathname === '/admin' ? '#1e3863' : 'transparent',
+                  border: pathname === '/admin' ? '1px solid #1e3863' : '1px solid transparent',
+                  color: pathname === '/admin' ? '#ffffff' : 'var(--text-primary)',
+                  fontSize: '12.5px',
+                  fontWeight: pathname === '/admin' ? 700 : 600,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>⚙️</span> Admin
+              </button>
+            )}
           </div>
         </div>
       </nav>
