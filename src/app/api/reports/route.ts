@@ -10,6 +10,7 @@ import {
   SubjectItem,
   User,
   normalizeStatus,
+  normalizeRole,
 } from '@/lib/constants';
 
 function isDateInRange(dateStr: string, startDate?: string, endDate?: string): boolean {
@@ -241,6 +242,100 @@ export async function GET(request: NextRequest) {
           totalEntries: filteredJournals.length,
         },
         records: filteredJournals,
+      });
+    }
+
+    // =========================================================================
+    // REPORT TYPE: TEACHER ATTENDANCE RECAP
+    // =========================================================================
+    if (reportType === 'teacher-attendance') {
+      let query = supabaseAdmin
+        .from('teacher_attendance')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
+
+      if (teacherName && teacherName !== 'ALL') {
+        query = query.ilike('username', teacherName);
+      }
+      if (startDate) {
+        query = query.gte('date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('date', endDate);
+      }
+
+      const { data: teacherAttData, error: tAttErr } = await query;
+      if (tAttErr) {
+        console.error('Supabase teacher attendance report error:', tAttErr);
+        return NextResponse.json({ error: 'Gagal memuat rekap presensi guru.' }, { status: 500 });
+      }
+
+      const allTeacherRecords = teacherAttData || [];
+
+      // Target teachers list
+      const targetTeachers = allUsers.filter((u) => {
+        const r = normalizeRole(u.role);
+        return r === 'Teacher' || r === 'Admin';
+      });
+
+      // Filter if specific teacher requested
+      const filteredTeachers =
+        teacherName && teacherName !== 'ALL'
+          ? targetTeachers.filter((u) => u.username.toLowerCase() === teacherName.toLowerCase())
+          : targetTeachers;
+
+      // Calculate aggregated recap per teacher
+      const aggregatedTeachers = filteredTeachers.map((teacher, idx) => {
+        const tRecords = allTeacherRecords.filter(
+          (r) =>
+            r.user_id === teacher.user_id ||
+            r.username.toLowerCase() === teacher.username.toLowerCase()
+        );
+
+        const masukRecords = tRecords.filter((r) => r.type === 'Masuk');
+        const hadirCount = masukRecords.filter((r) => (r.attendance_status || 'Hadir') === 'Hadir').length;
+        const dinasLuarCount = masukRecords.filter((r) => r.attendance_status === 'Dinas Luar').length;
+        const izinCount = masukRecords.filter((r) => r.attendance_status === 'Izin').length;
+        const sakitCount = masukRecords.filter((r) => r.attendance_status === 'Sakit').length;
+        const totalMasuk = hadirCount + dinasLuarCount;
+
+        return {
+          no: idx + 1,
+          user_id: teacher.user_id,
+          username: teacher.username,
+          nip: teacher.nip || '-',
+          hadir: hadirCount,
+          dinasLuar: dinasLuarCount,
+          izin: izinCount,
+          sakit: sakitCount,
+          totalHadir: totalMasuk,
+          totalRecords: tRecords.length,
+        };
+      });
+
+      return NextResponse.json({
+        reportType: 'teacher-attendance',
+        filter: {
+          teacherName,
+          startDate: startDate || '',
+          endDate: endDate || '',
+        },
+        metadata: {
+          classList,
+          teacherList,
+          userList,
+          subjectList,
+        },
+        summary: {
+          totalTeachers: aggregatedTeachers.length,
+          totalHadirAll: aggregatedTeachers.reduce((acc, t) => acc + t.hadir, 0),
+          totalDinasLuarAll: aggregatedTeachers.reduce((acc, t) => acc + t.dinasLuar, 0),
+          totalIzinAll: aggregatedTeachers.reduce((acc, t) => acc + t.izin, 0),
+          totalSakitAll: aggregatedTeachers.reduce((acc, t) => acc + t.sakit, 0),
+        },
+        records: aggregatedTeachers,
+        logRecords: allTeacherRecords,
       });
     }
 

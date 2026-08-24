@@ -53,6 +53,35 @@ interface JournalRow {
   photo_url?: string;
 }
 
+interface TeacherRecapRow {
+  no: number;
+  user_id: string;
+  username: string;
+  nip: string;
+  hadir: number;
+  dinasLuar: number;
+  izin: number;
+  sakit: number;
+  totalHadir: number;
+  totalRecords: number;
+}
+
+interface TeacherLogRow {
+  id: string;
+  user_id: string;
+  username: string;
+  nip?: string;
+  date: string;
+  time: string;
+  type: 'Masuk' | 'Pulang';
+  attendance_status: string;
+  photo_url?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  note?: string;
+}
+
 const MONTH_NAMES = [
   'Januari',
   'Februari',
@@ -75,8 +104,8 @@ function RecapContent() {
   const [loading, setLoading] = useState(true);
   const [fetchingData, setFetchingData] = useState(false);
 
-  // Tab: 'attendance' | 'journal-teacher' | 'journal-all'
-  const [activeTab, setActiveTab] = useState<'attendance' | 'journal-teacher' | 'journal-all'>('attendance');
+  // Tab: 'attendance' | 'teacher-attendance' | 'journal-teacher' | 'journal-all'
+  const [activeTab, setActiveTab] = useState<'attendance' | 'teacher-attendance' | 'journal-teacher' | 'journal-all'>('attendance');
 
   // Filter Presets: 'this-month' | 'specific-month' | 'semester-ganjil' | 'semester-genap' | 'custom'
   const [periodPreset, setPeriodPreset] = useState<string>('this-month');
@@ -140,6 +169,34 @@ function RecapContent() {
   const [journalSearch, setJournalSearch] = useState('');
   const [journalSortBy, setJournalSortBy] = useState<'date_asc' | 'date_desc' | 'week_asc' | 'week_desc' | 'teacher_asc' | 'subject_asc'>('date_asc');
   const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; title: string } | null>(null);
+
+  // Teacher Attendance Report State
+  const [teacherRecapRecords, setTeacherRecapRecords] = useState<TeacherRecapRow[]>([]);
+  const [teacherLogRecords, setTeacherLogRecords] = useState<TeacherLogRow[]>([]);
+  const [teacherSummary, setTeacherSummary] = useState<any>(null);
+  const [teacherViewMode, setTeacherViewMode] = useState<'summary' | 'detailed'>('summary');
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [teacherSortBy, setTeacherSortBy] = useState<'name_asc' | 'name_desc' | 'hadir_desc' | 'sakit_desc' | 'izin_desc'>('name_asc');
+
+  const displayedTeacherRecords = useMemo(() => {
+    let result = teacherRecapRecords.filter((r) => {
+      if (!teacherSearch) return true;
+      const q = teacherSearch.toLowerCase();
+      return r.username.toLowerCase().includes(q) || (r.nip && r.nip.toLowerCase().includes(q));
+    });
+
+    const sorted = [...result];
+    sorted.sort((a, b) => {
+      if (teacherSortBy === 'name_asc') return a.username.localeCompare(b.username);
+      if (teacherSortBy === 'name_desc') return b.username.localeCompare(a.username);
+      if (teacherSortBy === 'hadir_desc') return b.totalHadir - a.totalHadir;
+      if (teacherSortBy === 'sakit_desc') return b.sakit - a.sakit;
+      if (teacherSortBy === 'izin_desc') return b.izin - a.izin;
+      return 0;
+    });
+
+    return sorted.map((item, idx) => ({ ...item, no: idx + 1 }));
+  }, [teacherRecapRecords, teacherSearch, teacherSortBy]);
 
   const displayedAttendanceRecords = useMemo(() => {
     let result = attendanceRecords.filter((r) => {
@@ -274,14 +331,26 @@ function RecapContent() {
   const loadReportData = async () => {
     setFetchingData(true);
     try {
-      const typeParam = activeTab === 'attendance' ? 'attendance' : 'journal';
+      const typeParam =
+        activeTab === 'attendance'
+          ? 'attendance'
+          : activeTab === 'teacher-attendance'
+          ? 'teacher-attendance'
+          : 'journal';
+
       const params = new URLSearchParams();
       params.set('type', typeParam);
       if (effectiveStartDate) params.set('start_date', effectiveStartDate);
       if (effectiveEndDate) params.set('end_date', effectiveEndDate);
-      if (selectedClass && selectedClass !== 'ALL') params.set('class_name', selectedClass);
+      if (activeTab === 'attendance' && selectedClass && selectedClass !== 'ALL') {
+        params.set('class_name', selectedClass);
+      }
 
-      if (activeTab === 'journal-teacher' && selectedTeacher && selectedTeacher !== 'ALL') {
+      if (
+        (activeTab === 'journal-teacher' || activeTab === 'teacher-attendance') &&
+        selectedTeacher &&
+        selectedTeacher !== 'ALL'
+      ) {
         params.set('teacher', selectedTeacher);
       }
       if (activeTab === 'journal-teacher' && selectedSubject && selectedSubject !== 'ALL') {
@@ -330,6 +399,10 @@ function RecapContent() {
         setAttendanceRecords(data.records || []);
         setAttendanceSummary(data.summary || null);
         setAbsenceRecords(data.absenceRecords || []);
+      } else if (typeParam === 'teacher-attendance') {
+        setTeacherRecapRecords(data.records || []);
+        setTeacherLogRecords(data.logRecords || []);
+        setTeacherSummary(data.summary || null);
       } else {
         setJournalRecords(data.records || []);
       }
@@ -476,12 +549,12 @@ function RecapContent() {
               onClick={() => setActiveTab('attendance')}
               style={{
                 flex: 1,
-                minWidth: '150px',
-                padding: '9px 14px',
+                minWidth: '140px',
+                padding: '9px 12px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 fontWeight: 700,
                 fontFamily: 'inherit',
                 transition: 'all var(--transition)',
@@ -490,19 +563,40 @@ function RecapContent() {
                 boxShadow: activeTab === 'attendance' ? '0 2px 6px rgba(30, 56, 99, 0.3)' : 'none',
               }}
             >
-              🎓 1. Rekap Presensi Siswa
+              🎓 1. Presensi Siswa
+            </button>
+
+            <button
+              onClick={() => setActiveTab('teacher-attendance')}
+              style={{
+                flex: 1,
+                minWidth: '140px',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                fontFamily: 'inherit',
+                transition: 'all var(--transition)',
+                background: activeTab === 'teacher-attendance' ? '#1e3863' : 'transparent',
+                color: activeTab === 'teacher-attendance' ? '#ffffff' : 'var(--text-secondary)',
+                boxShadow: activeTab === 'teacher-attendance' ? '0 2px 6px rgba(30, 56, 99, 0.3)' : 'none',
+              }}
+            >
+              📸 2. Presensi Guru
             </button>
 
             <button
               onClick={() => setActiveTab('journal-teacher')}
               style={{
                 flex: 1,
-                minWidth: '150px',
-                padding: '9px 14px',
+                minWidth: '140px',
+                padding: '9px 12px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 fontWeight: 700,
                 fontFamily: 'inherit',
                 transition: 'all var(--transition)',
@@ -511,19 +605,19 @@ function RecapContent() {
                 boxShadow: activeTab === 'journal-teacher' ? '0 2px 6px rgba(30, 56, 99, 0.3)' : 'none',
               }}
             >
-              📖 2. Jurnal Per Guru &amp; Mapel
+              📖 3. Jurnal Per Guru
             </button>
 
             <button
               onClick={() => setActiveTab('journal-all')}
               style={{
                 flex: 1,
-                minWidth: '150px',
-                padding: '9px 14px',
+                minWidth: '140px',
+                padding: '9px 12px',
                 borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 fontWeight: 700,
                 fontFamily: 'inherit',
                 transition: 'all var(--transition)',
@@ -532,7 +626,7 @@ function RecapContent() {
                 boxShadow: activeTab === 'journal-all' ? '0 2px 6px rgba(30, 56, 99, 0.3)' : 'none',
               }}
             >
-              📚 3. Jurnal Seluruh Guru
+              📚 4. Jurnal Semua Guru
             </button>
           </div>
 
@@ -651,69 +745,91 @@ function RecapContent() {
                 </>
               )}
 
-              {/* Filter Rombel / Kelas */}
-              <div>
-                <label className="input-label" style={{ fontSize: '11.5px' }}>
-                  Rombel / Kelas
-                </label>
-                <select
-                  className="input-field"
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  disabled={Boolean(user.role !== 'Admin' && user.assigned_class && user.assigned_class.toUpperCase() !== 'ALL')}
-                  style={{ padding: '7px 10px', fontSize: '12.5px' }}
-                >
-                  <option value="ALL">Semua Kelas</option>
-                  {classList.map((cls, idx) => (
-                    <option key={`cls-${cls}-${idx}`} value={cls}>
-                      Kelas {cls}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Filter Guru (Only for tab 2) */}
-              {activeTab === 'journal-teacher' && (
-                <>
-                  <div>
-                    <label className="input-label" style={{ fontSize: '11.5px' }}>
-                      Guru Pengajar
-                    </label>
-                    <select
-                      className="input-field"
-                      value={selectedTeacher}
-                      onChange={(e) => setSelectedTeacher(e.target.value)}
-                      style={{ padding: '7px 10px', fontSize: '12.5px' }}
-                    >
-                      <option value="ALL">Semua Guru</option>
-                      {teacherList.map((t, idx) => (
-                        <option key={`t-${t}-${idx}`} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="input-label" style={{ fontSize: '11.5px' }}>
-                      Mata Pelajaran
-                    </label>
-                    <select
-                      className="input-field"
-                      value={selectedSubject}
-                      onChange={(e) => setSelectedSubject(e.target.value)}
-                      style={{ padding: '7px 10px', fontSize: '12.5px' }}
-                    >
-                      <option value="ALL">Semua Mapel</option>
-                      {subjectList.map((s, idx) => (
-                        <option key={`sub-${s.name}-${idx}`} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
+              {/* Filter Rombel / Kelas (Only for Student Attendance & Journal) */}
+              {activeTab !== 'teacher-attendance' && (
+                <div>
+                  <label className="input-label" style={{ fontSize: '11.5px' }}>
+                    Rombel / Kelas
+                  </label>
+                  <select
+                    className="input-field"
+                    value={selectedClass}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                    disabled={Boolean(user.role !== 'Admin' && user.assigned_class && user.assigned_class.toUpperCase() !== 'ALL')}
+                    style={{ padding: '7px 10px', fontSize: '12.5px' }}
+                  >
+                    <option value="ALL">Semua Kelas</option>
+                    {classList.map((cls, idx) => (
+                      <option key={`cls-${cls}-${idx}`} value={cls}>
+                        Kelas {cls}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              {/* Filter Guru (For Teacher Attendance & Journal Teacher) */}
+              {(activeTab === 'teacher-attendance' || activeTab === 'journal-teacher') && (
+                <div>
+                  <label className="input-label" style={{ fontSize: '11.5px' }}>
+                    Pendidik / Tenaga Kependidikan
+                  </label>
+                  <select
+                    className="input-field"
+                    value={selectedTeacher}
+                    onChange={(e) => setSelectedTeacher(e.target.value)}
+                    style={{ padding: '7px 10px', fontSize: '12.5px' }}
+                  >
+                    <option value="ALL">Semua Guru &amp; Pegawai</option>
+                    {teacherList.map((t, idx) => (
+                      <option key={`t-${t}-${idx}`} value={t}>
+                        👤 {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Filter View Mode for Teacher Attendance */}
+              {activeTab === 'teacher-attendance' && (
+                <div>
+                  <label className="input-label" style={{ fontSize: '11.5px' }}>
+                    Tampilan Tabel Cetak
+                  </label>
+                  <select
+                    className="input-field"
+                    value={teacherViewMode}
+                    onChange={(e) => setTeacherViewMode(e.target.value as any)}
+                    style={{ padding: '7px 10px', fontSize: '12.5px' }}
+                  >
+                    <option value="summary">📊 Ringkasan Kehadiran</option>
+                    <option value="detailed">📸 Detail Log Presensi &amp; Foto</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Filter Mata Pelajaran (Only for Journal Teacher) */}
+              {activeTab === 'journal-teacher' && (
+                <div>
+                  <label className="input-label" style={{ fontSize: '11.5px' }}>
+                    Mata Pelajaran
+                  </label>
+                  <select
+                    className="input-field"
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    style={{ padding: '7px 10px', fontSize: '12.5px' }}
+                  >
+                    <option value="ALL">Semua Mapel</option>
+                    {subjectList.map((s, idx) => (
+                      <option key={`sub-${s.name}-${idx}`} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Quick Table Sort / Search Controls for active template */}
               <div
                 style={{
@@ -752,6 +868,33 @@ function RecapContent() {
                         <option value="izin_desc">Izin Terbanyak</option>
                         <option value="rate_desc">% Kehadiran Tertinggi</option>
                         <option value="rate_asc">% Kehadiran Terendah</option>
+                      </select>
+                    </div>
+                  </>
+                ) : activeTab === 'teacher-attendance' ? (
+                  <>
+                    <input
+                      className="input-field"
+                      placeholder="🔍 Cari nama guru / NIP..."
+                      value={teacherSearch}
+                      onChange={(e) => setTeacherSearch(e.target.value)}
+                      style={{ maxWidth: '240px', fontSize: '12.5px', padding: '6px 12px' }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Urutkan:
+                      </span>
+                      <select
+                        className="input-field"
+                        value={teacherSortBy}
+                        onChange={(e) => setTeacherSortBy(e.target.value as any)}
+                        style={{ width: 'auto', fontSize: '12.5px', padding: '6px 10px' }}
+                      >
+                        <option value="name_asc">Nama Guru (A - Z)</option>
+                        <option value="name_desc">Nama Guru (Z - A)</option>
+                        <option value="hadir_desc">Kehadiran Terbanyak</option>
+                        <option value="sakit_desc">Sakit Terbanyak</option>
+                        <option value="izin_desc">Izin Terbanyak</option>
                       </select>
                     </div>
                   </>
@@ -802,19 +945,30 @@ function RecapContent() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '16px' }}>✍️</span>
                 <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Pengaturan Lembar Pengesahan &amp; Tanda Tangan (Nama, NIP &amp; Jabatan)
+                  {activeTab === 'teacher-attendance'
+                    ? 'Pengaturan Lembar Pengesahan: Tanda Tangan Kepala Sekolah (Tunggal)'
+                    : 'Pengaturan Lembar Pengesahan & Tanda Tangan (Nama, NIP & Jabatan)'}
                 </span>
               </div>
               <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                Bisa disesuaikan &amp; akan tercetak pada bagian paling bawah halaman laporan
+                {activeTab === 'teacher-attendance'
+                  ? 'Khusus Presensi Guru: Hanya kotak tanda tangan Kepala Sekolah yang dicetak'
+                  : 'Bisa disesuaikan & akan tercetak pada bagian paling bawah halaman laporan'}
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: activeTab === 'teacher-attendance' ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: '16px',
+                maxWidth: activeTab === 'teacher-attendance' ? '500px' : 'none',
+              }}
+            >
               {/* Left Side: Mengetahui (mis. Kepala Sekolah) */}
               <div style={{ background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', marginBottom: '10px' }}>
-                  ⬅️ Tanda Tangan Kiri: Mengetahui / Pimpinan
+                  {activeTab === 'teacher-attendance' ? '👑 Tanda Tangan: Kepala Sekolah (Pengesah Tunggal)' : '⬅️ Tanda Tangan Kiri: Mengetahui / Pimpinan'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div>
@@ -831,7 +985,7 @@ function RecapContent() {
                   </div>
                   <div>
                     <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
-                      Pilih Nama dari Users Sheet
+                      Pilih Nama dari Users
                     </label>
                     <select
                       className="input-field"
@@ -874,102 +1028,97 @@ function RecapContent() {
                 </div>
               </div>
 
-              {/* Right Side: Penanggung Jawab Laporan (mis. Wakasek / Wali Kelas / Koordinator) */}
-              <div style={{ background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', marginBottom: '10px' }}>
-                  ➡️ Tanda Tangan Kanan: Penanggung Jawab Laporan
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                      <label className="input-label" style={{ fontSize: '11px', margin: 0 }}>
-                        Jabatan / Role Laporan (Bisa Diubah)
-                      </label>
-                    </div>
-                    <input
-                      className="input-field"
-                      style={{ padding: '6px 10px', fontSize: '12px', marginBottom: '6px' }}
-                      value={rightSignRole}
-                      onChange={(e) => setRightSignRole(e.target.value)}
-                      placeholder="mis: Wakil Kepala Kesiswaan / Wali Kelas 7-A"
-                    />
-                    {/* Preset Buttons */}
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => setRightSignRole('Wakil Kepala Kesiswaan')}
-                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
-                      >
-                        + Wakasek Kesiswaan
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRightSignRole(selectedClass !== 'ALL' ? `Wali Kelas ${selectedClass}` : 'Wali Kelas')}
-                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
-                      >
-                        + Wali Kelas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRightSignRole('Koordinator Presensi / Kesiswaan')}
-                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
-                      >
-                        + Koordinator Presensi
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRightSignRole('Guru Mata Pelajaran')}
-                        style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
-                      >
-                        + Guru Mapel
-                      </button>
-                    </div>
+              {/* Right Side: Penanggung Jawab Laporan (Only for Siswa & Jurnal) */}
+              {activeTab !== 'teacher-attendance' && (
+                <div style={{ background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e3863', marginBottom: '10px' }}>
+                    ➡️ Tanda Tangan Kanan: Penanggung Jawab Laporan
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                        <label className="input-label" style={{ fontSize: '11px', margin: 0 }}>
+                          Jabatan / Role Laporan (Bisa Diubah)
+                        </label>
+                      </div>
+                      <input
+                        className="input-field"
+                        style={{ padding: '6px 10px', fontSize: '12px', marginBottom: '6px' }}
+                        value={rightSignRole}
+                        onChange={(e) => setRightSignRole(e.target.value)}
+                        placeholder="mis: Wakil Kepala Kesiswaan / Wali Kelas 7-A"
+                      />
+                      {/* Preset Buttons */}
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setRightSignRole('Wakil Kepala Kesiswaan')}
+                          style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                        >
+                          + Wakasek Kesiswaan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRightSignRole('Wali Kelas')}
+                          style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                        >
+                          + Wali Kelas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRightSignRole('Guru Mata Pelajaran')}
+                          style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: '#f1f5f9', cursor: 'pointer' }}
+                        >
+                          + Guru Mapel
+                        </button>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
-                      Pilih Nama dari Users Sheet
-                    </label>
-                    <select
-                      className="input-field"
-                      style={{ padding: '6px 10px', fontSize: '12px' }}
-                      value={rightSignName}
-                      onChange={(e) => handleSelectRightUser(e.target.value)}
-                    >
-                      <option value="">-- Pilih dari Daftar Users --</option>
-                      {userList.map((u, idx) => (
-                        <option key={`right-u-${u.username || 'idx'}-${idx}`} value={u.username}>
-                          👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
-                      Or Ketik Custom Nama &amp; Gelar
-                    </label>
-                    <input
-                      className="input-field"
-                      style={{ padding: '6px 10px', fontSize: '12px' }}
-                      value={rightSignName}
-                      onChange={(e) => setRightSignName(e.target.value)}
-                      placeholder="mis: Maria B. S.Pd"
-                    />
-                  </div>
-                  <div>
-                    <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
-                      NIP / NIK (Opsional)
-                    </label>
-                    <input
-                      className="input-field"
-                      style={{ padding: '6px 10px', fontSize: '12px' }}
-                      value={rightSignNip}
-                      onChange={(e) => setRightSignNip(e.target.value)}
-                      placeholder="mis: 19820311 200802 2 001 atau -"
-                    />
+                    <div>
+                      <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                        Pilih Nama dari Users
+                      </label>
+                      <select
+                        className="input-field"
+                        style={{ padding: '6px 10px', fontSize: '12px' }}
+                        value={rightSignName}
+                        onChange={(e) => handleSelectRightUser(e.target.value)}
+                      >
+                        <option value="">-- Pilih dari Daftar Users --</option>
+                        {userList.map((u, idx) => (
+                          <option key={`right-u-${u.username || 'idx'}-${idx}`} value={u.username}>
+                            👤 {u.username} {u.nip ? `(NIP: ${u.nip})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                        Or Ketik Custom Nama &amp; Gelar
+                      </label>
+                      <input
+                        className="input-field"
+                        style={{ padding: '6px 10px', fontSize: '12px' }}
+                        value={rightSignName}
+                        onChange={(e) => setRightSignName(e.target.value)}
+                        placeholder="mis: Maria B. S.Pd"
+                      />
+                    </div>
+                    <div>
+                      <label className="input-label" style={{ fontSize: '11px', marginBottom: '3px' }}>
+                        NIP / NIK (Opsional)
+                      </label>
+                      <input
+                        className="input-field"
+                        style={{ padding: '6px 10px', fontSize: '12px' }}
+                        value={rightSignNip}
+                        onChange={(e) => setRightSignNip(e.target.value)}
+                        placeholder="mis: 19820311 200802 2 001 atau -"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1004,6 +1153,7 @@ function RecapContent() {
           <div style={{ textAlign: 'center', marginTop: '14px', marginBottom: '14px' }}>
             <h2 style={{ fontSize: '15px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em', margin: 0, color: '#000000' }}>
               {activeTab === 'attendance' && 'LAPORAN REKAPITULASI PRESENSI SISWA'}
+              {activeTab === 'teacher-attendance' && 'LAPORAN REKAPITULASI PRESENSI GURU & TENAGA KEPENDIDIKAN'}
               {activeTab === 'journal-teacher' && 'LAPORAN REKAPITULASI JURNAL AGENDA MENGAJAR GURU'}
               {activeTab === 'journal-all' && 'LAPORAN REKAPITULASI JURNAL PEMBELAJARAN KELAS'}
             </h2>
@@ -1016,13 +1166,23 @@ function RecapContent() {
           <div className="report-meta-box">
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <tbody>
-                <tr>
-                  <td style={{ width: '130px', padding: '2px 0', fontWeight: 700, color: '#000000' }}>Rombongan Belajar</td>
-                  <td style={{ width: '10px', padding: '2px 0' }}>:</td>
-                  <td style={{ padding: '2px 0', color: '#000000' }}>
-                    {selectedClass === 'ALL' ? 'Seluruh Rombongan Belajar (Semua Kelas)' : `Kelas ${selectedClass}`}
-                  </td>
-                </tr>
+                {activeTab !== 'teacher-attendance' ? (
+                  <tr>
+                    <td style={{ width: '130px', padding: '2px 0', fontWeight: 700, color: '#000000' }}>Rombongan Belajar</td>
+                    <td style={{ width: '10px', padding: '2px 0' }}>:</td>
+                    <td style={{ padding: '2px 0', color: '#000000' }}>
+                      {selectedClass === 'ALL' ? 'Seluruh Rombongan Belajar (Semua Kelas)' : `Kelas ${selectedClass}`}
+                    </td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td style={{ width: '150px', padding: '2px 0', fontWeight: 700, color: '#000000' }}>Pendidik / Tenaga Kependidikan</td>
+                    <td style={{ width: '10px', padding: '2px 0' }}>:</td>
+                    <td style={{ padding: '2px 0', color: '#000000' }}>
+                      {selectedTeacher === 'ALL' ? 'Semua Pendidik & Pegawai Sekolah' : selectedTeacher}
+                    </td>
+                  </tr>
+                )}
                 {activeTab === 'journal-teacher' && (
                   <>
                     <tr>
@@ -1046,7 +1206,7 @@ function RecapContent() {
           </div>
 
           {/* =====================================================================
-              TEMPLATE 1: ATTENDANCE RECAP TABLE
+              TEMPLATE 1: STUDENT ATTENDANCE RECAP TABLE
              ===================================================================== */}
           {activeTab === 'attendance' && (
             <>
@@ -1230,38 +1390,195 @@ function RecapContent() {
           )}
 
           {/* =====================================================================
-              TEMPLATE 2: JOURNAL PER TEACHER TABLE
+              TEMPLATE 2: TEACHER ATTENDANCE RECAP TABLE (PRESENSI GURU)
              ===================================================================== */}
-          {activeTab === 'journal-teacher' && (
+          {activeTab === 'teacher-attendance' && (
             <>
               {fetchingData ? (
                 <div style={{ padding: '30px', textAlign: 'center' }}>
-                  <Spinner /> Memuat catatan jurnal mengajar...
+                  <Spinner /> Memuat data presensi guru...
+                </div>
+              ) : teacherRecapRecords.length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center', color: '#666666', fontSize: '13px' }}>
+                  Tidak ada catatan presensi guru pada periode ini.
+                </div>
+              ) : teacherViewMode === 'summary' ? (
+                <>
+                  <table className="ink-saver-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '35px', textAlign: 'center' }}>No</th>
+                        <th style={{ width: '130px', textAlign: 'center' }}>NIP</th>
+                        <th style={{ textAlign: 'left' }}>Nama Guru / Tenaga Kependidikan</th>
+                        <th style={{ width: '75px', textAlign: 'center' }}>Hadir (H)</th>
+                        <th style={{ width: '85px', textAlign: 'center' }}>Dinas Luar</th>
+                        <th style={{ width: '65px', textAlign: 'center' }}>Izin (I)</th>
+                        <th style={{ width: '65px', textAlign: 'center' }}>Sakit (S)</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>Total Masuk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedTeacherRecords.map((row) => (
+                        <tr key={row.user_id || row.no}>
+                          <td style={{ textAlign: 'center' }}>{row.no}</td>
+                          <td style={{ textAlign: 'center', fontSize: '11px', fontFamily: 'monospace', color: '#1e3863', fontWeight: 600 }}>
+                            {row.nip || '-'}
+                          </td>
+                          <td style={{ fontWeight: 600, color: '#000000' }}>{row.username}</td>
+                          <td style={{ textAlign: 'center', fontWeight: row.hadir > 0 ? 700 : 400 }}>{row.hadir}</td>
+                          <td style={{ textAlign: 'center', fontWeight: row.dinasLuar > 0 ? 700 : 400 }}>{row.dinasLuar}</td>
+                          <td style={{ textAlign: 'center', fontWeight: row.izin > 0 ? 700 : 400 }}>{row.izin}</td>
+                          <td style={{ textAlign: 'center', fontWeight: row.sakit > 0 ? 700 : 400 }}>{row.sakit}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 800, color: '#1e3863' }}>{row.totalHadir}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {teacherSummary && (
+                      <tfoot>
+                        <tr style={{ fontWeight: 700, background: '#fdfdfd' }}>
+                          <td colSpan={3} style={{ textAlign: 'center' }}>
+                            TOTAL PRESENSI SELURUH GURU &amp; PEGAWAI
+                          </td>
+                          <td style={{ textAlign: 'center' }}>{teacherSummary.totalHadirAll}</td>
+                          <td style={{ textAlign: 'center' }}>{teacherSummary.totalDinasLuarAll}</td>
+                          <td style={{ textAlign: 'center' }}>{teacherSummary.totalIzinAll}</td>
+                          <td style={{ textAlign: 'center' }}>{teacherSummary.totalSakitAll}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            {teacherSummary.totalHadirAll + teacherSummary.totalDinasLuarAll}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </>
+              ) : (
+                /* Detailed log mode with selfies and GPS */
+                <table className="ink-saver-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '35px', textAlign: 'center' }}>No</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Tanggal</th>
+                      <th style={{ width: '55px', textAlign: 'center' }}>Jam</th>
+                      <th style={{ textAlign: 'left' }}>Nama Guru</th>
+                      <th style={{ width: '65px', textAlign: 'center' }}>Sesi</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Status</th>
+                      <th style={{ width: '75px', textAlign: 'center' }}>Foto Selfie</th>
+                      <th style={{ textAlign: 'left' }}>Lokasi / Titik GPS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teacherLogRecords.map((log, idx) => (
+                      <tr key={log.id || idx}>
+                        <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                        <td style={{ textAlign: 'center', fontSize: '11px' }}>{log.date}</td>
+                        <td style={{ textAlign: 'center', fontSize: '11px', fontWeight: 600 }}>{log.time}</td>
+                        <td style={{ fontWeight: 600, color: '#000000' }}>{log.username}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{log.type}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              background:
+                                log.attendance_status === 'Hadir'
+                                  ? '#dcfce7'
+                                  : log.attendance_status === 'Dinas Luar'
+                                  ? '#e0e7ff'
+                                  : '#fef3c7',
+                              color:
+                                log.attendance_status === 'Hadir'
+                                  ? '#166534'
+                                  : log.attendance_status === 'Dinas Luar'
+                                  ? '#3730a3'
+                                  : '#92400e',
+                            }}
+                          >
+                            {log.attendance_status || 'Hadir'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                          {log.photo_url ? (
+                            <div
+                              style={{ cursor: 'pointer', display: 'inline-block' }}
+                              onClick={() =>
+                                setLightboxPhoto({
+                                  url: log.photo_url!,
+                                  title: `Swafoto Presensi: ${log.username} (${log.date} ${log.time})`,
+                                })
+                              }
+                              title="Klik untuk melihat foto selfie"
+                            >
+                              <img
+                                src={log.photo_url}
+                                alt="Selfie"
+                                className="report-photo-thumb"
+                                style={{ width: '38px', height: '38px', objectFit: 'cover', borderRadius: '4px' }}
+                              />
+                            </div>
+                          ) : (
+                            <span style={{ color: '#999999', fontSize: '11px' }}>-</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '11px', color: '#333333' }}>
+                          {log.latitude && log.longitude ? (
+                            <div>
+                              <span>📍 {Number(log.latitude).toFixed(5)}, {Number(log.longitude).toFixed(5)}</span>
+                              {log.address && <div style={{ color: '#666666', fontSize: '10px' }}>{log.address}</div>}
+                            </div>
+                          ) : (
+                            <span>{log.address || '-'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+
+          {/* =====================================================================
+              TEMPLATE 3 & 4: TEACHING JOURNAL RECAP TABLE
+             ===================================================================== */}
+          {(activeTab === 'journal-teacher' || activeTab === 'journal-all') && (
+            <>
+              {fetchingData ? (
+                <div style={{ padding: '30px', textAlign: 'center' }}>
+                  <Spinner /> Memuat data jurnal...
                 </div>
               ) : journalRecords.length === 0 ? (
                 <div style={{ padding: '30px', textAlign: 'center', color: '#666666', fontSize: '13px' }}>
-                  Tidak ada agenda mengajar yang tercatat pada periode ini.
+                  Tidak ada catatan jurnal agenda mengajar pada periode ini.
                 </div>
               ) : (
                 <table className="ink-saver-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '38px', textAlign: 'center' }}>No</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>Minggu Ke-</th>
-                      <th style={{ width: '100px', textAlign: 'center' }}>Tanggal</th>
-                      <th style={{ textAlign: 'left' }}>Uraian Materi Pembelajaran (Details)</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>Dokumentasi</th>
+                      <th style={{ width: '35px', textAlign: 'center' }}>No</th>
+                      <th style={{ width: '45px', textAlign: 'center' }}>Mgg</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Kelas</th>
+                      <th style={{ width: '130px', textAlign: 'left' }}>Mata Pelajaran</th>
+                      <th style={{ width: '120px', textAlign: 'left' }}>Guru Pengajar</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>Tanggal</th>
+                      <th style={{ textAlign: 'left' }}>Uraian Pokok Materi &amp; Kegiatan</th>
+                      <th style={{ width: '85px', textAlign: 'center' }}>Dokumentasi</th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayedJournalRecords.map((j, idx) => {
-                      const cleanDate = j.timestamp ? j.timestamp.slice(0, 10) : '-';
+                      const cleanDate = j.timestamp ? j.timestamp.split('T')[0] : '-';
                       return (
                         <tr key={j.journal_id || idx}>
                           <td style={{ textAlign: 'center' }}>{idx + 1}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                            Minggu {j.week_number}
+                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{j.week_number}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e3863' }}>
+                            {j.class_name}
                           </td>
+                          <td style={{ fontWeight: 600, color: '#000000' }}>{j.subject_name}</td>
+                          <td style={{ color: '#333333' }}>{j.teacher_username}</td>
                           <td style={{ textAlign: 'center' }}>{cleanDate}</td>
                           <td style={{ lineHeight: 1.4 }}>
                             <div style={{ fontWeight: 600 }}>{j.topic}</div>
@@ -1305,122 +1622,6 @@ function RecapContent() {
               )}
             </>
           )}
-
-          {/* =====================================================================
-              TEMPLATE 3: JOURNAL ALL TEACHERS (PER MONTH / SEMESTER)
-             ===================================================================== */}
-          {activeTab === 'journal-all' && (
-            <>
-              {fetchingData ? (
-                <div style={{ padding: '30px', textAlign: 'center' }}>
-                  <Spinner /> Memuat catatan jurnal seluruh guru...
-                </div>
-              ) : journalRecords.length === 0 ? (
-                <div style={{ padding: '30px', textAlign: 'center', color: '#666666', fontSize: '13px' }}>
-                  Tidak ada agenda pembelajaran yang tercatat pada periode ini.
-                </div>
-              ) : (
-                <table className="ink-saver-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '38px', textAlign: 'center' }}>No</th>
-                      <th style={{ width: '120px', textAlign: 'left' }}>Nama Guru</th>
-                      <th style={{ width: '110px', textAlign: 'left' }}>Mata Pelajaran</th>
-                      <th style={{ width: '75px', textAlign: 'center' }}>Minggu</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>Tanggal</th>
-                      <th style={{ textAlign: 'left' }}>Topik Pembelajaran (Details)</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>Dokumentasi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedJournalRecords.map((j, idx) => {
-                      const cleanDate = j.timestamp ? j.timestamp.slice(0, 10) : '-';
-                      return (
-                        <tr key={j.journal_id || idx}>
-                          <td style={{ textAlign: 'center' }}>{idx + 1}</td>
-                          <td style={{ fontWeight: 600 }}>{j.teacher_username}</td>
-                          <td>
-                            <span style={{ fontWeight: 600 }}>{j.subject_name}</span>
-                            <span style={{ fontSize: '11px', color: '#666666', marginLeft: '6px' }}>
-                              (Kelas {j.class_name})
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                            Minggu {j.week_number}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>{cleanDate}</td>
-                          <td style={{ lineHeight: 1.4 }}>{j.topic}</td>
-                          <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                            {j.photo_url ? (
-                              <div
-                                style={{ cursor: 'pointer', display: 'inline-block' }}
-                                onClick={() =>
-                                  setLightboxPhoto({
-                                    url: j.photo_url!,
-                                    title: `Dokumentasi: ${j.subject_name} - ${j.teacher_username} (Minggu ${j.week_number})`,
-                                  })
-                                }
-                                title="Klik untuk melihat foto ukuran penuh"
-                              >
-                                <img
-                                  src={j.photo_url}
-                                  alt="Dokumentasi"
-                                  className="report-photo-thumb"
-                                  onError={(e) => {
-                                    if (j.photo_url?.includes('/d/')) {
-                                      const id = j.photo_url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
-                                      if (id) (e.currentTarget as HTMLImageElement).src = `/api/drive-image?id=${id}`;
-                                    }
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <span style={{ color: '#999999', fontSize: '11px' }}>-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-
-          {/* =====================================================================
-              OFFICIAL SIGNATURE BLOCK (LEMBAR PENGESAHAN)
-             ===================================================================== */}
-          <div className="signature-section">
-            <div className="signature-box">
-              <div>Mengetahui,</div>
-              <div style={{ fontWeight: 700 }}>{leftSignRole || 'Kepala Sekolah SNT 10 Kupang'}</div>
-              <div className="signature-space" />
-              <div style={{ fontWeight: 700, textDecoration: 'underline' }}>
-                {leftSignName.trim() ? `( ${leftSignName.trim()} )` : '( .................................................... )'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#333333' }}>
-                NIP. {leftSignNip.trim() ? leftSignNip.trim() : '.........................................'}
-              </div>
-            </div>
-
-            <div className="signature-box">
-              <div>Kupang, {currentDateFormatted}</div>
-              <div style={{ fontWeight: 700 }}>
-                {rightSignRole || (activeTab === 'attendance' ? 'Wakil Kepala Kesiswaan' : 'Guru / Penanggung Jawab')}
-              </div>
-              <div className="signature-space" />
-              <div style={{ fontWeight: 700, textDecoration: 'underline' }}>
-                {rightSignName.trim()
-                  ? `( ${rightSignName.trim()} )`
-                  : activeTab === 'journal-teacher' && selectedTeacher !== 'ALL'
-                  ? `( ${selectedTeacher} )`
-                  : '( .................................................... )'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#333333' }}>
-                NIP. {rightSignNip.trim() ? rightSignNip.trim() : '.........................................'}
-              </div>
-            </div>
-          </div>
         </div>
       </main>
 
