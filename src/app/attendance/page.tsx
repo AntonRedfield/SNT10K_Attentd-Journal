@@ -712,8 +712,8 @@ function AttendanceContent() {
                           >
                             {student.full_name}
                           </div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                            ID: {student.student_id}
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            NISN: {student.student_id}
                           </div>
                         </div>
                       </div>

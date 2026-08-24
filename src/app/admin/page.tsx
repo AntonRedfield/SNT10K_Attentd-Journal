@@ -63,7 +63,7 @@ function AdminContent() {
   const [studentStatusFilter, setStudentStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [studentSortBy, setStudentSortBy] = useState<'name_asc' | 'name_desc' | 'class_asc' | 'active_first' | 'inactive_first'>('name_asc');
   const [showAddStudent, setShowAddStudent] = useState(false);
-  const [newStudent, setNewStudent] = useState({ full_name: '', class_name: 'X TKJ 1' });
+  const [newStudent, setNewStudent] = useState({ student_id: '', full_name: '', class_name: '7A' });
   const [addingStudent, setAddingStudent] = useState(false);
 
   // Subjects State & Filter/Sort
@@ -319,7 +319,7 @@ function AdminContent() {
       const data = await res.json();
       if (data.success) {
         showToast('Data siswa baru berhasil ditambahkan!', 'success');
-        setNewStudent({ full_name: '', class_name: 'X TKJ 1' });
+        setNewStudent({ student_id: '', full_name: '', class_name: '7A' });
         setShowAddStudent(false);
         fetchStudents();
       } else {
@@ -957,16 +957,30 @@ function AdminContent() {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                       gap: '14px',
                       marginBottom: '18px',
                     }}
                   >
                     <div>
+                      <label className="input-label">NISN (Nomor Induk Siswa Nasional)</label>
+                      <input
+                        className="input-field"
+                        placeholder="Contoh: 3149222367 (10 digit)"
+                        value={newStudent.student_id}
+                        onChange={(e) =>
+                          setNewStudent({ ...newStudent, student_id: e.target.value })
+                        }
+                        style={{ fontFamily: 'monospace' }}
+                        required
+                      />
+                    </div>
+
+                    <div>
                       <label className="input-label">Nama Lengkap Siswa</label>
                       <input
                         className="input-field"
-                        placeholder="Contoh: Maria Magdalena"
+                        placeholder="Contoh: ANGELICA ROSARIO FERNANDES"
                         value={newStudent.full_name}
                         onChange={(e) =>
                           setNewStudent({ ...newStudent, full_name: e.target.value })
@@ -979,7 +993,7 @@ function AdminContent() {
                       <label className="input-label">Rombongan Belajar (Kelas)</label>
                       <input
                         className="input-field"
-                        placeholder="Contoh: X TKJ 1"
+                        placeholder="Contoh: 7A, 7B, 10A, 10B"
                         value={newStudent.class_name}
                         onChange={(e) =>
                           setNewStudent({ ...newStudent, class_name: e.target.value })
@@ -1027,7 +1041,7 @@ function AdminContent() {
             >
               <input
                 className="input-field"
-                placeholder="🔍 Cari nama siswa / ID..."
+                placeholder="🔍 Cari nama siswa / NISN..."
                 value={studentSearch}
                 onChange={(e) => setStudentSearch(e.target.value)}
                 style={{ maxWidth: '240px', fontSize: '12.5px', padding: '7px 12px' }}
@@ -1097,7 +1111,7 @@ function AdminContent() {
                     <tr>
                       <th style={{ width: '48px' }}>No</th>
                       <th>Nama Lengkap</th>
-                      <th>ID Siswa</th>
+                      <th style={{ width: '130px' }}>NISN</th>
                       <th>Kelas</th>
                       <th>Status</th>
                       <th style={{ textAlign: 'right' }}>Aksi</th>
@@ -1113,7 +1127,7 @@ function AdminContent() {
                           <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                             {s.full_name}
                           </td>
-                          <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          <td style={{ fontSize: '12.5px', color: '#1e3863', fontWeight: 600, fontFamily: 'monospace' }}>
                             {s.student_id}
                           </td>
                           <td>
@@ -1681,8 +1695,8 @@ function AdminContent() {
                   <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)' }}>
                     Edit Data Induk Siswa
                   </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    ID: {editingStudent.student_id}
+                  <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    NISN: {editingStudent.student_id}
                   </p>
                 </div>
               </div>

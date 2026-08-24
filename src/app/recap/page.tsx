@@ -1062,13 +1062,14 @@ function RecapContent() {
                 <table className="ink-saver-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '38px', textAlign: 'center' }}>No</th>
+                      <th style={{ width: '35px', textAlign: 'center' }}>No</th>
+                      <th style={{ width: '95px', textAlign: 'center' }}>NISN</th>
                       <th style={{ textAlign: 'left' }}>Nama Siswa</th>
-                      <th style={{ width: '75px', textAlign: 'center' }}>Kelas</th>
-                      <th style={{ width: '65px', textAlign: 'center' }}>Sakit (S)</th>
-                      <th style={{ width: '65px', textAlign: 'center' }}>Izin (I)</th>
-                      <th style={{ width: '65px', textAlign: 'center' }}>Absen (A)</th>
-                      <th style={{ width: '75px', textAlign: 'center' }}>Hadir (H)</th>
+                      <th style={{ width: '65px', textAlign: 'center' }}>Kelas</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Sakit (S)</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Izin (I)</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Absen (A)</th>
+                      <th style={{ width: '70px', textAlign: 'center' }}>Hadir (H)</th>
                       <th style={{ width: '85px', textAlign: 'center' }}>Persentase</th>
                     </tr>
                   </thead>
@@ -1076,6 +1077,9 @@ function RecapContent() {
                     {displayedAttendanceRecords.map((row) => (
                       <tr key={row.no}>
                         <td style={{ textAlign: 'center' }}>{row.no}</td>
+                        <td style={{ textAlign: 'center', fontSize: '11px', fontFamily: 'monospace', color: '#1e3863', fontWeight: 600 }}>
+                          {row.student_id || '-'}
+                        </td>
                         <td style={{ fontWeight: 600, color: '#000000' }}>{row.full_name}</td>
                         <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e3863' }}>
                           {row.class_name}
@@ -1091,7 +1095,7 @@ function RecapContent() {
                   {attendanceSummary && (
                     <tfoot>
                       <tr style={{ fontWeight: 700, background: '#fdfdfd' }}>
-                        <td colSpan={3} style={{ textAlign: 'center' }}>
+                        <td colSpan={4} style={{ textAlign: 'center' }}>
                           TOTAL REKAPITULASI KELAS
                         </td>
                         <td style={{ textAlign: 'center' }}>{attendanceSummary.totalSakit}</td>
@@ -1143,7 +1147,8 @@ function RecapContent() {
                     <thead>
                       <tr>
                         <th style={{ width: '35px', textAlign: 'center' }}>No</th>
-                        <th style={{ width: '85px', textAlign: 'center' }}>Tanggal</th>
+                        <th style={{ width: '90px', textAlign: 'center' }}>NISN</th>
+                        <th style={{ width: '80px', textAlign: 'center' }}>Tanggal</th>
                         <th style={{ textAlign: 'left' }}>Nama Siswa</th>
                         <th style={{ width: '65px', textAlign: 'center' }}>Kelas</th>
                         <th style={{ width: '65px', textAlign: 'center' }}>Status</th>
@@ -1155,6 +1160,9 @@ function RecapContent() {
                       {absenceRecords.map((rec, idx) => (
                         <tr key={`abs-${rec.student_id}-${rec.date}-${idx}`}>
                           <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                          <td style={{ textAlign: 'center', fontSize: '11px', fontFamily: 'monospace', color: '#1e3863', fontWeight: 600 }}>
+                            {rec.student_id || '-'}
+                          </td>
                           <td style={{ textAlign: 'center', fontSize: '11px' }}>{rec.date}</td>
                           <td style={{ fontWeight: 600, color: '#000000' }}>{rec.full_name}</td>
                           <td style={{ textAlign: 'center', color: '#1e3863', fontWeight: 600 }}>{rec.class_name}</td>
@@ -1205,11 +1213,11 @@ function RecapContent() {
                                   gap: '4px',
                                 }}
                               >
-                                <span>📷</span>
+                                <span>📎</span>
                                 <span>Lihat Bukti</span>
                               </button>
                             ) : (
-                              <span style={{ fontSize: '10.5px', color: '#999999' }}>-</span>
+                              <span style={{ fontSize: '11px', color: '#999999' }}>-</span>
                             )}
                           </td>
                         </tr>

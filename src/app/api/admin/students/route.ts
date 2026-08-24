@@ -45,13 +45,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Akses khusus Administrator dan Guru diperlukan.' }, { status: 403 });
     }
 
-    const { full_name, class_name } = await request.json();
+    const { student_id, full_name, class_name } = await request.json();
 
     if (!full_name || !class_name) {
       return NextResponse.json({ error: 'Nama lengkap dan kelas wajib diisi.' }, { status: 400 });
     }
 
-    const studentId = `S-${Date.now()}`;
+    const studentId = student_id && student_id.trim() ? student_id.trim() : `S-${Date.now()}`;
     const { error: insertErr } = await supabaseAdmin
       .from('students')
       .insert({
