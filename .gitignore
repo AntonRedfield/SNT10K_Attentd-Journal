@@ -1,6 +1,42 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ==========================================
+# DevSecOps Strict Repository Security Protocol
+# ==========================================
 
-# dependencies
+# 1. Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+!.env.template
+
+# 2. Cryptographic Keys & Certificates
+*.pem
+*.cer
+*.crt
+*.key
+*.jks
+*.p12
+*.keystore
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# 3. Service Accounts & Credential Dumps
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!public/manifest.json
+
+# 4. Database Dumps & PII
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+dump.csv
+
+# 5. Dependencies & Package Managers
 /node_modules
 /.pnp
 .pnp.*
@@ -10,37 +46,26 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# 6. Build Artifacts & Caches
 /.next/
 /out/
+/build/
+/dist/
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+__pycache__/
+*.pyc
+*.class
+venv/
+env/
 
-# production
-/build
-
-# misc
+# 7. OS System & Debug Files
 .DS_Store
-*.pem
-
-# debug
+Thumbs.db
+desktop.ini
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-
-# env files & credentials
-.env*
-!.env.example
-*.json
-!package.json
-!tsconfig.json
-!package-lock.json
-
-# vercel
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
