@@ -19,3 +19,52 @@ export const supabaseAdmin: SupabaseClient = createClient(
     },
   }
 );
+
+/**
+ * Safely find a user by username or user_id without PostgREST .or() comma-splitting errors.
+ */
+export async function findUserByIdentifier(identifier: string): Promise<Record<string, any> | null> {
+  const clean = identifier.trim();
+  if (!clean) return null;
+
+  try {
+    // 1. Try exact or case-insensitive match on username
+    const { data: byUsername, error: errUser } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .ilike('username', clean)
+      .maybeSingle();
+
+    if (!errUser && byUsername) {
+      return byUsername;
+    }
+
+    // 2. Try exact or case-insensitive match on user_id
+    const { data: byUserId, error: errId } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .ilike('user_id', clean)
+      .maybeSingle();
+
+    if (!errId && byUserId) {
+      return byUserId;
+    }
+
+    // 3. Fallback: Substring search on username (handles partial names like "Ivan Rahas")
+    const { data: byPartial, error: errPartial } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .ilike('username', `%${clean}%`)
+      .limit(1);
+
+    if (!errPartial && byPartial && byPartial.length > 0) {
+      return byPartial[0];
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Error finding user by identifier:', err);
+    return null;
+  }
+}
+

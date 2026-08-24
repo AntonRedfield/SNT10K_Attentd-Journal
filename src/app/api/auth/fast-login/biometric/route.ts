@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getSession, signToken, createSessionCookie } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { supabaseAdmin, findUserByIdentifier } from '@/lib/supabase-admin';
 import { SessionPayload, normalizeRole } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -79,13 +79,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: user, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .or(`user_id.ilike.${identifier},username.ilike.${identifier}`)
-      .maybeSingle();
+    const user = await findUserByIdentifier(identifier);
 
-    if (error || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
     }
 

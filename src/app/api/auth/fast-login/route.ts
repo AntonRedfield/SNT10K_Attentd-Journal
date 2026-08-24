@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { supabaseAdmin, findUserByIdentifier } from '@/lib/supabase-admin';
 import { User, normalizeRole } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -20,13 +20,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'ID Pengguna diperlukan.' }, { status: 400 });
     }
 
-    const { data: user, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .or(`user_id.ilike.${targetUserId},username.ilike.${targetUserId}`)
-      .maybeSingle();
+    const user = await findUserByIdentifier(targetUserId);
 
-    if (error || !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Pengguna tidak ditemukan.' }, { status: 404 });
     }
 

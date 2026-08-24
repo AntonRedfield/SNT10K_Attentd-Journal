@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { supabaseAdmin, findUserByIdentifier } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 import { signToken, createSessionCookie } from '@/lib/auth';
@@ -18,28 +18,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Query Supabase directly
-    const { data: users, error } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .or(`username.ilike.${identifier},user_id.ilike.${identifier}`);
-
-    if (error) {
-      console.error('Supabase user lookup error:', error);
-      return NextResponse.json(
-        { error: 'Gagal memverifikasi akun pengguna.' },
-        { status: 500 }
-      );
-    }
-
-    const user = (users as User[] | null)?.find((u) => {
-      const upass = String(u.password ?? '').trim();
-      return upass === password;
-    });
+    // Safe lookup by username or user_id without PostgREST comma issues
+    const user = await findUserByIdentifier(identifier);
 
     if (!user) {
       return NextResponse.json(
-        { error: 'ID Pengguna atau kata sandi tidak sesuai.' },
+        { error: 'ID Pengguna atau nama pengguna tidak ditemukan.' },
+        { status: 401 }
+      );
+    }
+
+    const upass = String(user.password ?? '').trim();
+    if (upass !== password) {
+      return NextResponse.json(
+        { error: 'Kata sandi tidak sesuai. Silakan periksa kembali.' },
         { status: 401 }
       );
     }
