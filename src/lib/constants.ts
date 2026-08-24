@@ -265,3 +265,24 @@ export interface SessionPayload {
   assigned_class: string;
 }
 
+// Teacher Attendance record
+export interface TeacherAttendanceRecord {
+  id?: number;
+  user_id: string;
+  username: string;
+  nip?: string;
+  date: string;
+  time: string;
+  timestamp?: string;
+  type: 'Masuk' | 'Pulang';
+  attendance_status: 'Hadir' | 'Dinas Luar' | 'Izin' | 'Sakit';
+  photo_url: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy?: number | null;
+  address?: string | null;
+  note?: string | null;
+  created_at?: string;
+}
+
+

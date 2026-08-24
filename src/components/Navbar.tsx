@@ -240,6 +240,24 @@ export default function Navbar({ user: initialUser }: NavbarProps) {
             </button>
             {(currentRole === 'Admin' || currentRole === 'Teacher') && (
               <button
+                onClick={() => router.push('/teacher-attendance')}
+                className="btn btn-sm"
+                style={{
+                  background: 'rgba(225, 29, 72, 0.1)',
+                  border: '1px solid rgba(225, 29, 72, 0.3)',
+                  color: '#e11d48',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  padding: '6px 11px',
+                  cursor: 'pointer',
+                  borderRadius: '6px',
+                }}
+              >
+                📸 Presensi Guru
+              </button>
+            )}
+            {(currentRole === 'Admin' || currentRole === 'Teacher') && (
+              <button
                 onClick={() => router.push('/journal')}
                 className="btn btn-sm"
                 style={{

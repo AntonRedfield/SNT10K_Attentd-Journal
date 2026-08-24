@@ -66,6 +66,16 @@ function DashboardContent() {
       roles: ['Admin', 'Teacher', 'PIC'],
     },
     {
+      title: 'Presensi Guru & Pegawai',
+      subtitle: 'Swafoto & Geolokasi GPS',
+      description: 'Lakukan presensi kehadiran pendidik harian menggunakan swafoto (selfie) dan pelacakan koordinat GPS otomatis.',
+      icon: '📸',
+      path: '/teacher-attendance',
+      gradient: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+      accentColor: '#be123c',
+      roles: ['Admin', 'Teacher'],
+    },
+    {
       title: 'Jurnal Mengajar',
       subtitle: 'Agenda Pembelajaran',
       description: 'Kelola agenda kegiatan belajar mengajar mingguan, materi pokok, dan topik pembelajaran kelas.',
